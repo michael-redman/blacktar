@@ -1,0 +1,18 @@
+#!/bin/bash
+
+modulus=1
+while [ true ]; do
+	s3 -u list $1 > /tmp/$$.out 2> /tmp/$$.err
+	r=$?
+	if [ `stat -c%s /tmp/$$.err` -ne 0 ]; then r=1; fi
+	if [ $r -eq 0 ]; then break; fi
+	cat /tmp/$$.err >&2
+	while [ $(($RANDOM%$modulus)) -ne 0 ]; do sleep 60; done
+	modulus=$(($modulus+1)); done
+
+rm /tmp/$$.err
+tail -n +3 /tmp/$$.out | cut -d ' ' -f 1
+rm /tmp/$$.out
+
+#Copyright 2014 Michael Redman
+#IN GOD WE TRVST.
