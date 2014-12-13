@@ -32,6 +32,8 @@ Blacktar inherits the limitations of all its dependencies, including Verity and 
 
 Blacktar will not work with pathnames that are close to the system maximum length, because it concatenates the target root you specify for restoring with the original path you backed up.
 
+Blacktar uses the same passphrase for both GPG encryption and for calculating the HMACs of the file hashes.  By default Blacktar does not do anything to obscure the sizes of your files, although there is a naieve routine in the backup script you can uncomment, which will add a file of noise to each data file's tar archive before encrypting.
+
 INSTALLING
 
 Blacktar was developed on Debian Linux and has not yet been compiled or tested on other systems.
