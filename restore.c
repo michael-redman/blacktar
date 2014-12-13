@@ -25,6 +25,7 @@
 #include <libgen.h>
 #include <libpq-fe.h>
 #include <linux/limits.h>
+#include <openssl/hmac.h>
 #include <openssl/sha.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,6 +37,7 @@
 #include <utime.h>
 
 #include <fgetsnull.h>
+#include <hexbytes.h>
 
 #include "err.h"
 
@@ -89,10 +91,8 @@ int main(int argc, char ** argv){
 
 	int c, r, pipe_fd[2], pid;
 	unsigned int l, key_len;
-	char	*prefix=NULL, *prefix_escaped=NULL, *sql, *target_root,
-		path_ar0[PATH_MAX+1], path_ar1[PATH_MAX+1],
-		hmac[2*SHA_DIGEST_LENGTH+2], return_value=0;
-	unsigned char * key;
+	char	*prefix=NULL, *prefix_escaped=NULL, *sql, *target_root, path_ar0[PATH_MAX+1], path_ar1[PATH_MAX+1], md_text[2*SHA256_DIGEST_LENGTH+1], hmac[2*SHA256_DIGEST_LENGTH+2], return_value=0;
+	unsigned char * key, *md_binary;
 	PGresult * result0, * result1, * result2;
 	FILE * hmacs_tmpfile, *dirs_tmpfile, *child_stdout;
 	mode_t mode;
@@ -256,8 +256,8 @@ int main(int argc, char ** argv){
 		{ perror("sort child error"); AT; goto err0; }
 
 	while	(!feof(child_stdout))
-		{	if(!fgets(hmac,2*SHA_DIGEST_LENGTH+2,child_stdout)) break;
-			hmac[2*SHA_DIGEST_LENGTH]='\0';
+		{	if(!fgets(hmac,2*SHA256_DIGEST_LENGTH+2,child_stdout)) break;
+			hmac[2*SHA256_DIGEST_LENGTH]='\0';
 
 #define INODES_SQL "declare inode_cursor cursor for select "\
 	"device,inode,ctime "\
@@ -305,6 +305,8 @@ int main(int argc, char ** argv){
 					if(!PQntuples(result1)) break;
 					if	(!path_ar0[0])
 						{	sprintf(path_ar0,"%s/%s",target_root,PQgetvalue(result1,0,0));
+							md_binary=HMAC(EVP_sha256(),key,key_len,(unsigned char const *)hmac,2*SHA256_DIGEST_LENGTH,NULL,NULL);
+							hexbytes_print(md_binary,SHA256_DIGEST_LENGTH,md_text);
 							if	(pipe(pipe_fd))
 								{ perror("pipe failed"); AT; goto err2; }
 							if	(!(pid=fork()))
@@ -313,7 +315,7 @@ int main(int argc, char ** argv){
 											||close(pipe_fd[1]))
 									{	perror("i/o redirection failed"); AT;
 										exit(EXIT_FAILURE); }
-									execl("/usr/local/share/blacktar/retrieve","/usr/local/share/blacktar/retrieve",argv[optind+2],hmac,path_ar0,NULL);
+									execl("/usr/local/share/blacktar/retrieve","/usr/local/share/blacktar/retrieve",argv[optind+2],hmac,path_ar0,md_text,NULL);
 									perror("execl failed"); AT; exit(EXIT_FAILURE); }
 							if	(	close(pipe_fd[0])
 									|| pid==-1

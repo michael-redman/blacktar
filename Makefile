@@ -1,30 +1,37 @@
 prefix?=/usr/local
 exec_prefix?=$(prefix)
 
-CFLAGS=-Wall -g -I $(prefix)/include
-LDFLAGS=-L $(prefix)/lib
-PG_FLAGS=-I /usr/include/postgresql -lpq
+CFLAGS=-Wall -g -I $(prefix)/include -I /usr/include/postgresql
+LDFLAGS=-L $(prefix)/lib -lhexbytes -lfgetsnull -lpq 
 QUERY_TYPE?=JOIN
 
-LIBS=hmac_of_file noise
+PROGS=restore s3_hashes list_cruft
+LIBS=hmacs_of_hashes noise
 SCRIPTS=s3_list_keys retrieve
 
-all: $(LIBS) restore
+all: $(LIBS) $(PROGS)
 
-hmac_of_file: hmac_of_file_main.c
-	cc $(CFLAGS) $(LDFLAGS) -lcrypto -lhexbytes -L $(exec_prefix)/lib/verity -lhmac_of_file -o $@ $<
+hmacs_of_hashes: read_whole_file.c hmacs_of_hashes.c
+	cc $(CFLAGS) $(LDFLAGS) -lcrypto -o $@ $^
 
 noise: noise.c
 	cc -Wall -g -o $@ $<
 
-restore: restore.c
-	cc -D$(QUERY_TYPE) $(CFLAGS) $(LDFLAGS) $(PG_FLAGS) -lfgetsnull -L $(exec_prefix)/lib/verity -lread_whole_file -o $@ $<
+s3_hashes: s3_hashes.c read_whole_file.c
+	cc -D$(QUERY_TYPE) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+list_cruft: list_cruft.c read_whole_file.c
+	cc -D$(QUERY_TYPE) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+restore: restore.c read_whole_file.c
+	cc -D$(QUERY_TYPE) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
 install:
 	$(foreach prog, COPYRIGHT LICENSE README, install -D -m 0644 $(prog) $(prefix)/share/doc/blacktar/$(prog);)
 	$(foreach prog, $(LIBS), install -D -m 0755 $(prog) $(exec_prefix)/lib/blacktar/$(prog);)
 	$(foreach prog, $(SCRIPTS), install -D -m 0755 $(prog) $(prefix)/share/blacktar/$(prog);)
-	$(foreach prog, backup restore list_cruft, install -D -m 0755 $(prog) $(exec_prefix)/bin/blacktar_$(prog);)
+	$(foreach prog, backup $(PROGS), install -D -m 0755 $(prog) $(exec_prefix)/bin/blacktar_$(prog);)
+	mkdir -p /var/local/blacktar
 
 uninstall:
 	rm -rf $(exec_prefix)/lib/blacktar
@@ -33,6 +40,6 @@ uninstall:
 	rm -rf $(prefix)/share/blacktar
 
 clean:
-	rm -f $(LIBS) restore
+	rm -f $(LIBS) $(PROGS)
 
 #IN GOD WE TRVST.

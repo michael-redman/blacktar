@@ -8,17 +8,17 @@ Blacktar comes with ABSOLUTELY NO WARRANTY, to the extent permitted by applicabl
 
 ABOUT
 
-Blacktar backs up your data to S3.
+Blacktar backs up your files to S3, encrypted by GNUPG, and indexed by SHA-256 HMAC of the files' SHA-256 hashes.
 
-Because Blacktar does not distinguish between "full" and "incremental" backups, you can back up only new content, or delete only old garbage, without ever having to re-do a "full" backup.
+This "content-addressed" design means that Blacktar only stores 1 copy of a file no matter how many copies are on your filesystem; Blacktar never has to re-back up unchanged content that's only been renamed; and you can make as many incremental backups as you want or clean up old garbage from the backup store without ever having to re-do a "full" backup.
 
-Because Blacktar saves and finds your files using their HMAC signatures instead of their pathnames, Blacktar won't re-backup unchanged contenet just because you've renamed or moved it.
+Blacktar also caches a list of which hashes are on S3, in /var/local/blacktar, so it doesn't have to list out your S3 bucket each backup run.  If you use Blacktar on multiple computers, accidentally delete files from the S3 backup, or otherwise lose or dirty that cache, you should rebuild the cache manually with the command "s3_list_keys bucket_name | blacktar_s3_hashes 'db conn string' passphrase_file | sort -u > /var/local/blacktar/bucket_name".
 
-Blacktar uses the Verity content tracking system to map between HMAC signatures and paths on your file system where content can be found or needs to be restored.
+Blacktar uses the Verity content tracking system to map between hashes and paths on your file system where content can be found or needs to be restored.
 
 LIMITATIONS
 
-You must back up your Verity database manually and independently of Blacktar.
+Because Blacktar needs your Verity database to do restores, you must keep a backup of the database dump outside of Blacktar.
 
 When indexing your files with Verity, you must use full pathnames (with the leading "/") or Blacktar will not be able to link to your files from the tempdir while backing them up.
 
@@ -26,15 +26,11 @@ See the note in the Verity README on the importance of a correct system clock.
 
 Blacktar will refuse to back up files that have changed since you last indexed them with verity_index_paths.  If it takes a long time for the index and backup to run on your data set, this could cause volatile files not to be backed up for an indefinite number of index-backup cycles.
 
-Filenames will be visible to other users in the output of "ps".
+Filenames, their SHA-256 hashes, and the HMAC signatures of those hashes, are visible to other users in the output of "ps".
 
 Blacktar inherits the limitations of all its dependencies, including Verity and libs3.  See the documentation for those projects for more information.
 
 Blacktar will not work with pathnames that are close to the system maximum length, because it concatenates the target root you specify for restoring with the original path you backed up.
-
-This implementation of Blacktar is not cryptographically secure.  At a minimum, (1) the current implementations of Verity and Blacktar use the deprecated SHA-1 algorithm for calculating HMAC signatures; (2) this implementation of Blacktar uses the same passphrase for encryption as for the HMAC signatures; and (3) this implementation of Blacktar includes only a naive algorithm for obscuring file sizes, and even that is disabled by default to save storage space.
-
-Blacktar does not use SSL for transmission to/from S3 because the data is already encrypted with GPG and using SSL would break compatibility with some older systems (that should be upgraded) where blacktar would otherwise run as designed.
 
 The restore process is exceeding slow on some older versions of Postgres that don't realize they can use index scans to identify the paths referencing an inode.
 
