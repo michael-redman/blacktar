@@ -82,13 +82,12 @@ function s3_put { #s3-bucket-name hash path
 			while [ $(($RANDOM%$modulus)) -ne 0 ]; do sleep 60; done
 			modulus=$(($modulus+1)); done
 		rm "$tmp/$$/$2"
+		echo $2 >> /var/local/blacktar/"$1"
 		echo "put: finished $2 $3" >&2
 		echo "$2$3"; }
 
-"$dir"/../lib/verity/list_hmacs ${prefix[@]} "$connection_string" "${argv[$OPTIND]}" | sort -u > "$tmp/$$/db" &
-"$dir"/../share/blacktar/s3_list_keys "${argv[$OPTIND+1]}" | sort > "$tmp/$$/s3" &
-wait
-diff "$tmp/$$/db" "$tmp/$$/s3" > "$tmp/$$/diff"
+"$dir"/../lib/verity/list_hmacs ${prefix[@]} "$connection_string" "${argv[$OPTIND]}" | sort -u > "$tmp/$$/db"
+diff "$tmp/$$/db" "/var/local/blacktar/${argv[$OPTIND+1]}" > "$tmp/$$/diff"
 rm "$tmp/$$/db"
 rm "$tmp/$$/s3"
 
@@ -97,6 +96,9 @@ while IFS= read -r -d '' line; do
 	path=`echo -n "$line" | cut -c 41-`
 	s3_put "${argv[$OPTIND+1]}" "$hash" "$path"
 	done < <(grep --mmap '^<' "$tmp/$$/diff" | cut -c 3- | "$dir"/../lib/verity/paths_of_hmacs ${prefix[@]} "$connection_string")
+
+sort -u < /var/local/blacktar/"${argv[$OPTIND+1]}" > /var/local/blacktar/"!${argv[$OPTIND+1]}"
+mv /var/local/blacktar/"!${argv[$OPTIND+1]}" /var/local/blacktar/"${argv[$OPTIND+1]}"
 rm -rf "$tmp/$$"
 
 #IN GOD WE TRVST.

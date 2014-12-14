@@ -16,6 +16,8 @@ Because Blacktar saves and finds your files using their HMAC signatures instead 
 
 Blacktar uses the Verity content tracking system to map between HMAC signatures and paths on your file system where content can be found or needs to be restored.
 
+Blacktar also caches the listing of your S3 bucket in /var/local/blacktar/bucket_name to save bandwidth.  See the README in the "blacktar256" git branch for documentation on this new feature, including important details about special situations when you must sort or rebuild the cache manually.
+
 LIMITATIONS
 
 You must back up your Verity database manually and independently of Blacktar.
