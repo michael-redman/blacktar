@@ -14,9 +14,9 @@ Because Blacktar does not distinguish between "full" and "incremental" backups, 
 
 Because Blacktar saves and finds your files using their HMAC signatures instead of their pathnames, Blacktar won't re-backup unchanged contenet just because you've renamed or moved it.
 
-Blacktar uses the Verity content tracking system to map between HMAC signatures and paths on your file system where content can be found or needs to be restored.
+Blacktar also caches a list of which hashes are on S3, in /var/local/blacktar/bucket_name, so it doesn't have to list out your S3 bucket each backup run.  However see the paragraph in the "USE" section about special circumstances in which you must sort or rebuild the cache for the backup script to work properly.
 
-Blacktar also caches the listing of your S3 bucket in /var/local/blacktar/bucket_name to save bandwidth.  See the README in the "blacktar256" git branch for documentation on this new feature, including important details about special situations when you must sort or rebuild the cache manually.
+Blacktar uses the Verity content tracking system to map between HMAC signatures and paths on your file system where content can be found or needs to be restored.
 
 LIMITATIONS
 
@@ -70,6 +70,8 @@ If you do not specify a path prefix with -p like in the example, Blacktar will b
 You may also specify a Unix timestamp as the -t option to blacktar_restore, which will restore the paths to the state as of the most recent Verity indexing less than or equal to the time you specifiey.  e.g., -t `date -d '20140214' +%s`
 
 The backup and restore commands pass the database connection string to libpq unmodified.  See the libpq documentation for the full syntax.
+
+Certain events may require you to sort or rebuild the cached bucket listing in /var/local/blacktar/bucket_name.  During each run, the backup script diffs the cache against the database to check which files are already backed up, appends the hashes of newly backed up files, and re-sorts the whole list before exiting so it is usable for the next run.  If a backup run is interrupted, "sort -u" the list manually before running blacktar_backup again.  If you switch computers, delete files from the S3 backup (intentionally or accidentally), or otherwise lose or dirty the cache, rebuild the list manually with the command "/usr/local/lib/blacktar/s3_list_keys bucket_name | sort -u > /var/local/blacktar/bucket_name".
 
 There is a bug affecting Blacktar and the above example on user accounts where gpg has never been run before.  Blacktar does not recognize messages like "gpg: directory `/home/ec2-user/.gnupg' created" as benign, and will abort backing up the current file.  Blacktar will backup any aborted files on the next run(s) when gpg is done printing its setup messages, or you can work around the bug entirely by manually encrypting a file with gpg before ever running blacktar_backup.
 
