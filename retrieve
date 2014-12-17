@@ -45,8 +45,9 @@ while [ true ]; do
 			rm -rf "$tmp/$$/$$"
 			rm "$3"
 			echo "blacktar s3_verify: checksum mismatch: $2, retrying" 1>&2
-			continue; fi
-	break; done
+			continue
+		else break; fi
+	done
 	rm -rf "$tmp/$$"
 	exit 0
 
