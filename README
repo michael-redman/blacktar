@@ -52,7 +52,7 @@ USE
 
 Example commands to index, backup, & restore a tree, and compare the restored tree to the original:
 
-you@yourhost:~$ { find /some/tree/ -print0; verity_list_paths -p /some/tree/ dbname=verity_example_db; } | sort -uz | verity_index_paths dbname=verity_example_db <(echo -n "my passphrase")
+you@yourhost:~$ { find /some/tree/ -print0; verity_list_paths -p /some/tree/ dbname=verity_example_db; } | sort -uz | verity_index_paths dbname=verity_example_db
 you@yourhost:~$ export S3_ACCESS_KEY_ID=your_access_key
 you@yourhost:~$ export S3_SECRET_ACCESS_KEY=your_secret_key
 you@yourhost:~$ blacktar_backup -p /some/tree/ dbname=verity_example_db <(echo -n "my passphrase") s3_bucket_name
