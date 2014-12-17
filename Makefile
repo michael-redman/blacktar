@@ -6,12 +6,12 @@ LDFLAGS=-L $(prefix)/lib -lhexbytes -lfgetsnull -lpq
 QUERY_TYPE?=JOIN
 
 PROGS=restore s3_hashes list_cruft
-LIBS=hmacs_of_hashes noise
-SCRIPTS=s3_list_keys retrieve
+LIBS=hmac_of_hash noise
+SCRIPTS=get_passphrase retrieve get_passphrase
 
 all: $(LIBS) $(PROGS)
 
-hmacs_of_hashes: read_whole_file.c hmacs_of_hashes.c
+hmac_of_hash: read_whole_file.c hmac_of_hash.c
 	cc $(CFLAGS) $(LDFLAGS) -lcrypto -o $@ $^
 
 noise: noise.c
@@ -31,11 +31,15 @@ install:
 	$(foreach prog, $(LIBS), install -D -m 0755 $(prog) $(exec_prefix)/lib/blacktar/$(prog);)
 	$(foreach prog, $(SCRIPTS), install -D -m 0755 $(prog) $(prefix)/share/blacktar/$(prog);)
 	$(foreach prog, backup $(PROGS), install -D -m 0755 $(prog) $(exec_prefix)/bin/blacktar_$(prog);)
+	install -m 0755 s3_list_keys $(exec_prefix)/bin/s3_list_keys
 	mkdir -p /var/local/blacktar
+	chmod +t /var/local/blacktar
+	chmod go+rwx /var/local/blacktar
 
 uninstall:
 	rm -rf $(exec_prefix)/lib/blacktar
-	$(foreach prog, backup restore list_cruft, rm -f $(exec_prefix)/bin/blacktar_$(prog);)
+	$(foreach prog, backup $(PROGS), rm -f $(exec_prefix)/bin/blacktar_$(prog);)
+	rm -f $(exec_prefix)/bin/blacktar
 	rm -rf $(prefix)/share/doc/blacktar
 	rm -rf $(prefix)/share/blacktar
 

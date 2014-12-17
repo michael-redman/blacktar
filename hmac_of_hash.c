@@ -15,7 +15,6 @@ int main (int argc, char ** argv) {
 	while	(!feof(stdin)) {
 		if (!fgets(data,2*SHA256_DIGEST_LENGTH+2,stdin)) break;
 		data[2*SHA256_DIGEST_LENGTH]='\0';
-		printf("%s ",data);
 		hmac=HMAC(EVP_sha256(),key,key_l,(unsigned char const *)data,2*SHA256_DIGEST_LENGTH,NULL,NULL);
 		hexbytes_print(hmac,SHA256_DIGEST_LENGTH,data);
 		puts(data); }

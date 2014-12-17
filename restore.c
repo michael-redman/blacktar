@@ -315,7 +315,7 @@ int main(int argc, char ** argv){
 											||close(pipe_fd[1]))
 									{	perror("i/o redirection failed"); AT;
 										exit(EXIT_FAILURE); }
-									execl("/usr/local/share/blacktar/retrieve","/usr/local/share/blacktar/retrieve",argv[optind+2],hmac,path_ar0,md_text,NULL);
+									execl("/usr/local/share/blacktar/retrieve","/usr/local/share/blacktar/retrieve",argv[optind+2],md_text,path_ar0,hmac,NULL); //hmac is really the plain sha256sum here because of the old variable names from prior Verity version
 									perror("execl failed"); AT; exit(EXIT_FAILURE); }
 							if	(	close(pipe_fd[0])
 									|| pid==-1

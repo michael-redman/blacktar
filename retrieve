@@ -33,11 +33,11 @@ while [ true ]; do
 		echo "blacktar s3_verify $2: gpg/tar pipeline printed errors, retrying" >&2
 		continue; fi
 	if
-		[ ! -f "$tmp/$$/$$/$2" ]
+		[ ! -f "$tmp/$$/$$/$4" ]
 		then
 			echo "blacktar s3_verify: failed to extract $2, retrying" >&2
 			continue; fi
-	mv "$tmp/$$/$$/$2" "$3"
+	mv "$tmp/$$/$$/$4" "$3"
 	test_hmac=`sha256sum "$3" | cut -d ' ' -f 1`
 	if
 		[ ! "$test_hmac" -o \( "$4" != "$test_hmac" \) ]
