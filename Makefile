@@ -6,12 +6,12 @@ LDFLAGS=-L $(prefix)/lib -lhexbytes -lfgetsnull -lpq
 QUERY_TYPE?=JOIN
 
 PROGS=restore s3_hashes list_cruft
-LIBS=hmac_of_hash noise
-SCRIPTS=get_passphrase retrieve get_passphrase
+LIBS=hmacs_of_hashes noise
+SCRIPTS=get_passphrase retrieve
 
 all: $(LIBS) $(PROGS)
 
-hmac_of_hash: read_whole_file.c hmac_of_hash.c
+hmacs_of_hashes: read_whole_file.c hmacs_of_hashes.c
 	cc $(CFLAGS) $(LDFLAGS) -lcrypto -o $@ $^
 
 noise: noise.c

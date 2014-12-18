@@ -1,4 +1,4 @@
-#define USE "s3_hashes 'db conn string' key_file < output_of_s3_list_keys\n"
+#define USE "blacktar_list_cruft 'db conn string' key_file < output_of_s3_list_keys\n"
 
 #include <libpq-fe.h>
 #include <openssl/hmac.h>

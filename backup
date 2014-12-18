@@ -19,7 +19,7 @@ mkdir "$tmp/$$"
 
 function s3_put { #s3-bucket-name hash path
 	echo "put: starting $2 $3" >&2
-	hmac=`echo -n "$hash" | "$dir"/../lib/blacktar/hmac_of_hash <(echo -n "$passphrase_xxd" | xxd -r)`
+	hmac=`echo -n "$hash" | "$dir"/../lib/blacktar/hmacs_of_hashes <(echo -n "$passphrase_xxd" | xxd -r)`
 	mkdir "$tmp/$$/$2.d"
 	ln -s "$3" "$tmp/$$/$2.d/$2"
 #	noise to osbscure file size
@@ -70,20 +70,25 @@ function s3_put { #s3-bucket-name hash path
 			while [ $(($RANDOM%$modulus)) -ne 0 ]; do sleep 60; done
 			modulus=$(($modulus+1)); done
 		rm "$tmp/$$/$hmac"
-		echo "$2" >> /var/local/blacktar/"$1"
+		echo "$hmac" >> /var/local/blacktar/"$1"
 		echo "put: finished $2 $3" >&2
 		echo "$2$3"; }
 
-"$dir"/../lib/verity/list_hashes ${prefix[@]} "$connection_string" "${argv[$OPTIND]}" | sort -u > "$tmp/$$/db"
-diff "$tmp/$$/db" "/var/local/blacktar/${argv[$OPTIND+1]}" > "$tmp/$$/diff"
+"$dir"/../lib/verity/list_hashes ${prefix[@]} "$connection_string" "${argv[$OPTIND]}" | sort -u | tee "$tmp/$$/hashes" | "$dir"/../lib/blacktar/hmacs_of_hashes <(echo -n "$passphrase_xxd" | xxd -r) | tee "$tmp/$$/hmacs" | sort -u > "$tmp/$$/db"
+diff "$tmp/$$/db" "/var/local/blacktar/${argv[$OPTIND+1]}" | grep '^<' | cut -c 3- > "$tmp/$$/diff.hmacs"
 rm "$tmp/$$/db"
-
+for line in `cat "$tmp/$$/diff.hmacs"`; do
+	n=`grep -nF $line "$tmp/$$/hmacs" | cut -d : -f 1`
+	sed -n ${n}p "$tmp/$$/hashes" >> "$tmp/$$/diff.hashes"
+	done
+rm "$tmp/$$/diff.hmacs"
+if	[ ! -f "$tmp/$$/diff.hashes" ]
+	then rm -rf "$tmp/$$"; exit; fi
 while IFS= read -r -d '' line; do
 	hash=`echo -n "$line" | cut -c 1-64`
 	path=`echo -n "$line" | cut -c 65-`
 	s3_put "${argv[$OPTIND+1]}" "$hash" "$path"
-	done < <(grep '^<' "$tmp/$$/diff" | cut -c 3- | "$dir"/../lib/verity/paths_of_hashes ${prefix[@]} "$connection_string")
-
+	done < <("$dir"/../lib/verity/paths_of_hashes "$connection_string" < "$tmp/$$/diff.hashes")
 rm -rf "$tmp/$$"
 sort -u /var/local/blacktar/"${argv[$OPTIND+1]}" > /var/local/blacktar/!"${argv[$OPTIND+1]}"
 mv /var/local/blacktar/!"${argv[$OPTIND+1]}" /var/local/blacktar/"${argv[$OPTIND+1]}"

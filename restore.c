@@ -150,7 +150,7 @@ int main(int argc, char ** argv){
 "(select gid from inodes where inodes.device=paths.device and inodes.inode=paths.inode and inodes.ctime=paths.ctime) as gid, "\
 "(select mtime from inodes where inodes.device=paths.device and inodes.inode=paths.inode and inodes.ctime=paths.ctime) as mtime, "\
 "(select content from inodes where inodes.device=paths.device and inodes.inode=paths.inode and inodes.ctime=paths.ctime) as content "\
-" from paths where device is not null and xtime=(select max(xtime) from paths as alias where alias.path=paths.path and xtime<=%ld)"
+" from paths where device is not null and not exists (select * from paths as alias where alias.path=paths.path and alias.xtime>paths.xtime and alias.xtime<=%ld)"
 //possible PREFIX_SQL
 #endif
 
