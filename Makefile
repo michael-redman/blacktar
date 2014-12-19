@@ -5,7 +5,7 @@ CFLAGS=-Wall -g -I $(prefix)/include -I /usr/include/postgresql
 LDFLAGS=-L $(prefix)/lib -lhexbytes -lfgetsnull -lpq 
 QUERY_TYPE?=JOIN
 
-PROGS=restore s3_hashes list_cruft
+PROGS=restore list_cruft
 LIBS=hmacs_of_hashes noise
 SCRIPTS=get_passphrase retrieve
 
@@ -16,9 +16,6 @@ hmacs_of_hashes: read_whole_file.c hmacs_of_hashes.c
 
 noise: noise.c
 	cc -Wall -g -o $@ $<
-
-s3_hashes: s3_hashes.c read_whole_file.c
-	cc -D$(QUERY_TYPE) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
 list_cruft: list_cruft.c read_whole_file.c
 	cc -D$(QUERY_TYPE) $(CFLAGS) $(LDFLAGS) -o $@ $^
