@@ -6,13 +6,16 @@ LDFLAGS=-L $(prefix)/lib -lhexbytes -lfgetsnull -lpq
 QUERY_TYPE?=JOIN
 
 PROGS=restore list_cruft
-LIBS=hmacs_of_hashes noise
+LIBS=hmacs_of_hashes hashes_of_hmacs noise
 SCRIPTS=get_passphrase retrieve
 
 all: $(LIBS) $(PROGS)
 
 hmacs_of_hashes: read_whole_file.c hmacs_of_hashes.c
 	cc $(CFLAGS) $(LDFLAGS) -lcrypto -o $@ $^
+
+hashes_of_hmacs: hashes_of_hmacs.c
+	cc -Wall -g -o $@ $<
 
 noise: noise.c
 	cc -Wall -g -o $@ $<

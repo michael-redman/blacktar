@@ -12,7 +12,7 @@ Blacktar backs up your files to S3, encrypted by GNUPG, and indexed by the SHA-2
 
 This "content-addressed" design means that Blacktar only stores 1 copy of a file no matter how many copies are on your filesystem; Blacktar never has to re-back up unchanged files that have only been moved or renamed; you can make as many incremental backups as you want or clean up old garbage from the backup store without ever having to re-do a "full" backup; and Blacktar can resume an interrupted backup without re-transferring any files.
 
-Blacktar also caches a list of which hashes are on S3, in /var/local/blacktar/bucket_name, so it doesn't have to list out your S3 bucket each backup run.  However see the paragraph in the "USE" section about special circumstances in which you must sort or rebuild the cache for the backup script to work properly.
+Blacktar also caches a list of which hashes are on S3 so it doesn't have to list out your S3 bucket each backup run.
 
 Blacktar uses the Verity content tracking system to map between hashes and paths on your file system where content can be found or needs to be restored.
 
@@ -65,7 +65,7 @@ You may also specify a Unix timestamp as the -t option to blacktar_restore, whic
 
 The backup and restore commands pass the database connection string to libpq unmodified.  See the libpq documentation for the full syntax.
 
-Certain events may require you to sort or rebuild the cached bucket listing in /var/local/blacktar/bucket_name.  During each run, the backup script diffs the database against the cache to check which files are already backed up, appends the S3 key of each file to the list after the file is backed up, and re-sorts the whole list before exiting so it is usable for the next run.  If a backup run is interrupted, "sort -u" the list manually before running blacktar_backup again.  If you switch computers, delete files from the S3 backup (intentionally or accidentally), or otherwise lose or dirty the cache, rebuild the list manually with the command "s3_list_keys bucket_name | sort -u > /var/local/blacktar/bucket_name".
+If a system's cache of which files are already backed up to S3 becomes invalid (for example because you ran blacktar_backup on another computer, so this one doesn't know about the files backed up in that run), rebuild it with "s3_list_keys bucket_name | sort -u > /var/local/blacktar/bucket_name".
 
 There is a bug affecting Blacktar and the above example on user accounts where gpg has never been run before.  Blacktar does not recognize messages like "gpg: directory `/home/ec2-user/.gnupg' created" as benign, and will abort backing up the current file.  Blacktar will backup any aborted files on the next run(s) when gpg is done printing its setup messages, or you can work around the bug entirely by manually encrypting a file with gpg before ever running blacktar_backup.
 
