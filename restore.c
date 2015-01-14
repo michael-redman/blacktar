@@ -295,7 +295,6 @@ int main
 					result1=PQexec(db,"fetch links_cursor");
 					SQLCHECK(db,result1,PGRES_TUPLES_OK,err2);
 					if(!PQntuples(result1)) break;
-					puts(PQgetvalue(result1,0,0));
 					if	(!path_ar0[0])
 						{	build_restore_path(PQgetvalue(result1,0,0),path_ar0);
 							hmac_binary=HMAC(EVP_sha256(),key,key_len,(unsigned char const *)hash,2*SHA256_DIGEST_LENGTH,NULL,NULL);
@@ -315,13 +314,13 @@ int main
 									|| write(pipe_fd[1],key,key_len)!=key_len
 									|| close(pipe_fd[1]))
 								{	perror("failed invoking retrieve command"); AT; wait(&r); goto err2; }
-							wait(&r);
-							if	(WIFEXITED(r)&&WEXITSTATUS(r)==3)
-								{	fprintf(stderr,"ERROR: FILE NOT FOUND FOR HASH: %s (%s), continuing\n",hash,PQgetvalue(result1,0,0)); AT;
-									return_value=3;
-									CLOSE_LINKS_CURSOR
-									goto hash_done_cleanup; }
-							if (!WIFEXITED(r)||WEXITSTATUS(r)) { fprintf(stderr,"retrieve child returned %d\n",WEXITSTATUS(r)); AT; goto err2; }
+							while	(wait(&r)!=-1)
+								{	if	(WIFEXITED(r)&&WEXITSTATUS(r)==3)
+										{	fprintf(stderr,"ERROR: FILE NOT FOUND FOR HASH: %s (%s), continuing\n",hash,PQgetvalue(result1,0,0)); AT;
+											return_value=3;
+											CLOSE_LINKS_CURSOR
+											goto hash_done_cleanup; }
+									if (!WIFEXITED(r)||WEXITSTATUS(r)) { fprintf(stderr,"retrieve child returned %d\n",WEXITSTATUS(r)); AT; goto err2; } }
 							if	(set_perms(
 									path_ar0,
 									strtol(PQgetvalue(result0,0,3),NULL,10),

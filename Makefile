@@ -1,7 +1,7 @@
 prefix?=/usr/local
 exec_prefix?=$(prefix)
 
-CFLAGS=-Wall -g -I $(prefix)/include -I /usr/include/postgresql
+CFLAGS=-Wall -g -fstack-protector -I $(prefix)/include -I /usr/include/postgresql
 LDFLAGS=-L $(prefix)/lib -lhexbytes -lfgetsnull -lpq 
 QUERY_TYPE?=JOIN
 
