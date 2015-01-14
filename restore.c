@@ -245,10 +245,10 @@ int main
 			perror("execl failed"); AT; exit(EXIT_FAILURE); }
 	if	(pid==-1)
 		{ perror("fork failed"); AT; goto err0; }
-	wait(&r);
-	if	(	!WIFEXITED(r) || WEXITSTATUS(r)
-			|| close(pipe_fd[1])
-			|| !(child_stdout=fdopen(pipe_fd[0],"rb")))
+	while	(wait(&r)!=-1)
+		if	(!WIFEXITED(r) || WEXITSTATUS(r))
+			{ perror("sort child error"); AT; goto err0; }
+	if	(close(pipe_fd[1]) || !(child_stdout=fdopen(pipe_fd[0],"rb")))
 		{ perror("sort child error"); AT; goto err0; }
 
 	while	(!feof(child_stdout))
@@ -313,7 +313,7 @@ int main
 									|| pid==-1
 									|| write(pipe_fd[1],key,key_len)!=key_len
 									|| close(pipe_fd[1]))
-								{	perror("failed invoking retrieve command"); AT; wait(&r); goto err2; }
+								{	perror("failed invoking retrieve command"); AT; while(wait(&r)==-1); goto err2; }
 							while	(wait(&r)!=-1)
 								{	if	(WIFEXITED(r)&&WEXITSTATUS(r)==3)
 										{	fprintf(stderr,"ERROR: FILE NOT FOUND FOR HASH: %s (%s), continuing\n",hash,PQgetvalue(result1,0,0)); AT;

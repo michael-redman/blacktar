@@ -1,8 +1,10 @@
 prefix?=/usr/local
 exec_prefix?=$(prefix)
 
-CFLAGS=-Wall -g -fstack-protector -I $(prefix)/include -I /usr/include/postgresql
-LDFLAGS=-L $(prefix)/lib -lhexbytes -lfgetsnull -lpq 
+CFLAGS=-Wall -g -fstack-protector -I $(prefix)/include
+ECPG_CFLAGS=-I /usr/include/postgresql
+LDFLAGS=-L $(prefix)/lib
+LDADD=-lhexbytes -lfgetsnull -lpq 
 QUERY_TYPE?=JOIN
 
 PROGS=restore list_cruft
@@ -12,19 +14,13 @@ SCRIPTS=get_passphrase retrieve
 all: $(LIBS) $(PROGS)
 
 hmacs_of_hashes: read_whole_file.c hmacs_of_hashes.c
-	cc $(CFLAGS) $(LDFLAGS) -lcrypto -o $@ $^
-
-hashes_of_hmacs: hashes_of_hmacs.c
-	cc -Wall -g -o $@ $<
-
-noise: noise.c
-	cc -Wall -g -o $@ $<
+	cc $(CFLAGS) $(LDFLAGS) -lcrypto -lhexbytes -o $@ $^
 
 list_cruft: list_cruft.c read_whole_file.c
-	cc -D$(QUERY_TYPE) $(CFLAGS) $(LDFLAGS) -o $@ $^
+	cc -D$(QUERY_TYPE) $(CFLAGS) $(ECPG_CFLAGS) $(LDFLAGS) $(LDADD) -o $@ $^
 
 restore: restore.c read_whole_file.c
-	cc -D$(QUERY_TYPE) $(CFLAGS) $(LDFLAGS) -o $@ $^
+	cc -D$(QUERY_TYPE) $(CFLAGS) $(ECPG_CFLAGS) $(LDFLAGS) $(LDADD) -o $@ $^
 
 install:
 	$(foreach prog, COPYRIGHT LICENSE README, install -D -m 0644 $(prog) $(prefix)/share/doc/blacktar/$(prog);)
