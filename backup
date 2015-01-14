@@ -1,6 +1,6 @@
 #!/bin/bash
 
-USE="blacktar_backup [-p /path/prefix] 'db conn string' /key/file s3-bucket"
+USE="verity_list -c ... | grep -z ... | blacktar_backup 'db conn string' /key/file s3-bucket"
 
 dir=`cd $(dirname $0) && pwd`
 
@@ -74,7 +74,11 @@ function s3_put { #s3-bucket-name hash path
 		echo "put: finished $2 $3" >&2
 		echo "$2$3"; }
 
-"$dir"/../lib/verity/list_hashes ${prefix[@]} "$connection_string" "${argv[$OPTIND]}" | "$dir"/../lib/blacktar/hmacs_of_hashes <(echo -n "$passphrase_xxd" | xxd -r) | sort -u > "$tmp/$$/hash_lookup_table"
+while IFS= read -r -d '' line; do
+	echo ${line:0:64} >> "$tmp/$$/hashes.in"
+	done
+"$dir"/../lib/blacktar/hmacs_of_hashes <(echo -n "$passphrase_xxd" | xxd -r) < "$tmp/$$/hashes.in" | sort -u > "$tmp/$$/hash_lookup_table"
+rm "$tmp/$$/hashes.in"
 cut -d ' ' -f 1 < "$tmp/$$/hash_lookup_table" > "$tmp/$$/db"
 
 if	[ ! -f "/var/local/blacktar/${argv[$OPTIND+1]}" ]
