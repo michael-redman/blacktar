@@ -94,7 +94,7 @@ while IFS= read -r -d '' line; do
 	hash=`echo -n "$line" | cut -c 1-64`
 	path=`echo -n "$line" | cut -c 65-`
 	s3_put "${argv[$OPTIND+1]}" "$hash" "$path"
-	done < <("$dir"/../lib/verity/paths_of_hashes "$connection_string" < "$tmp/$$/diff.hashes")
+	done < <("$dir"/../lib/blacktar/paths_of_hashes "$connection_string" < "$tmp/$$/diff.hashes")
 
 rm -rf "$tmp/$$"
 

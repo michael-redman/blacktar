@@ -153,9 +153,6 @@ int main
 	result0=PQexec(db,"create temporary table paths_to_restore(path text not null unique)");
 	SQLCHECK(db,result0,PGRES_COMMAND_OK,err1);
 	PQclear(result0);
-	result0=PQexec(db,"create index restore_index on paths_to_restore(path)");
-	SQLCHECK(db,result0,PGRES_COMMAND_OK,err1);
-	PQclear(result0);
 
 	//Part 1
 	while	(!feof(stdin))

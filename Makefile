@@ -8,7 +8,7 @@ LDADD=-lhexbytes -lfgetsnull -lpq
 QUERY_TYPE?=JOIN
 
 PROGS=restore list_cruft
-LIBS=hmacs_of_hashes hashes_of_hmacs noise
+LIBS=hmacs_of_hashes hashes_of_hmacs paths_of_hashes noise
 SCRIPTS=get_passphrase retrieve
 
 all: $(LIBS) $(PROGS)
@@ -16,10 +16,13 @@ all: $(LIBS) $(PROGS)
 hmacs_of_hashes: read_whole_file.c hmacs_of_hashes.c
 	cc $(CFLAGS) $(LDFLAGS) -lcrypto -lhexbytes -o $@ $^
 
-list_cruft: list_cruft.c read_whole_file.c
+paths_of_hashes: paths_of_hashes.c
 	cc -D$(QUERY_TYPE) $(CFLAGS) $(ECPG_CFLAGS) $(LDFLAGS) $(LDADD) -o $@ $^
 
 restore: restore.c read_whole_file.c
+	cc -D$(QUERY_TYPE) $(CFLAGS) $(ECPG_CFLAGS) $(LDFLAGS) $(LDADD) -o $@ $^
+
+list_cruft: list_cruft.c read_whole_file.c
 	cc -D$(QUERY_TYPE) $(CFLAGS) $(ECPG_CFLAGS) $(LDFLAGS) $(LDADD) -o $@ $^
 
 install:
