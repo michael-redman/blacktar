@@ -1,6 +1,6 @@
 #!/bin/bash
 
-USE="verity_list -c ... | grep -z ... | blacktar_backup 'db conn string' /key/file s3-bucket"
+USE="verity_list -c ... | grep -z ... | sort -uz | blacktar_backup 'db conn string' /key/file s3-bucket"
 
 dir=`cd $(dirname $0) && pwd`
 
@@ -76,6 +76,8 @@ function s3_put { #s3-bucket-name hash path
 
 while IFS= read -r -d '' line; do
 	echo ${line:0:64} >> "$tmp/$$/hashes.in"
+	echo -n "$line" >> "$tmp/$$/stdin-copy"
+	echo -ne \\0 >> "$tmp/$$/stdin-copy"
 	done
 "$dir"/../lib/blacktar/hmacs_of_hashes <(echo -n "$passphrase_xxd" | xxd -r) < "$tmp/$$/hashes.in" | sort -u > "$tmp/$$/hash_lookup_table"
 rm "$tmp/$$/hashes.in"
@@ -94,7 +96,7 @@ while IFS= read -r -d '' line; do
 	hash=`echo -n "$line" | cut -c 1-64`
 	path=`echo -n "$line" | cut -c 65-`
 	s3_put "${argv[$OPTIND+1]}" "$hash" "$path"
-	done < <("$dir"/../lib/blacktar/paths_of_hashes "$connection_string" < "$tmp/$$/diff.hashes")
+	done < <("$dir"/../lib/verity/paths "$tmp/$$/stdin-copy" < "$tmp/$$/diff.hashes")
 
 rm -rf "$tmp/$$"
 
