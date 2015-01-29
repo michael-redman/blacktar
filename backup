@@ -1,18 +1,11 @@
 #!/bin/bash
 
-USE="verity_list -c ... | grep -z ... | sort -uz | blacktar_backup 'db conn string' /key/file s3-bucket"
+USE="verity_list -c ... | grep -z ... | blacktar_backup /key/file s3-bucket"
 
 dir=`cd $(dirname $0) && pwd`
 
-argv=("$@")
-while	getopts	"p:" opt; do
-	case	"$opt" in
-		p)	prefix=(-p "$OPTARG");;
-		\?)	echo "$USE" >&2; exit 1;; esac; done
-if	[ $(($#-$OPTIND)) -ne 2 ]
-	then echo "$USE" >&2; exit 1; fi
-connection_string="${argv[$OPTIND-1]}"
-passphrase_xxd="`xxd ${argv[$OPTIND]}`"
+passphrase_xxd="`xxd $1`"
+bucket="$2"
 
 if [ ! "$tmp" ]; then tmp=/tmp; fi
 mkdir "$tmp/$$"
@@ -74,20 +67,23 @@ function s3_put { #s3-bucket-name hash path
 		echo "put: finished $2 $3" >&2
 		echo "$2$3"; }
 
+cat /dev/stdin > "$tmp/$$/stdin-buf"
+
 while IFS= read -r -d '' line; do
 	echo ${line:0:64} >> "$tmp/$$/hashes.in"
-	echo -n "$line" >> "$tmp/$$/stdin-copy"
-	echo -ne \\0 >> "$tmp/$$/stdin-copy"
-	done
+	echo -n "$line" >> "$tmp/$$/stdin-sorted"
+	echo -ne \\0 >> "$tmp/$$/stdin-sorted"
+	done < <(sort -uz "$tmp/$$/stdin-buf")
+
 "$dir"/../lib/blacktar/hmacs_of_hashes <(echo -n "$passphrase_xxd" | xxd -r) < "$tmp/$$/hashes.in" | sort -u > "$tmp/$$/hash_lookup_table"
 rm "$tmp/$$/hashes.in"
 cut -d ' ' -f 1 < "$tmp/$$/hash_lookup_table" > "$tmp/$$/db"
 
-if	[ ! -f "/var/local/blacktar/${argv[$OPTIND+1]}" ]
-	then	s3_list_keys "${argv[$OPTIND+1]}" | sort -u \
-		> "/var/local/blacktar/${argv[$OPTIND+1]}"; fi
+if	[ ! -f "/var/local/blacktar/$bucket" ]
+	then	s3_list_keys "$bucket" | sort -u \
+		> "/var/local/blacktar/$bucket"; fi
 
-diff "$tmp/$$/db" <(sort -u "/var/local/blacktar/${argv[$OPTIND+1]}") | grep '^<' | cut -c 3- | "$dir"/../lib/blacktar/hashes_of_hmacs "$tmp/$$/hash_lookup_table" > "$tmp/$$/diff.hashes"
+diff "$tmp/$$/db" <(sort -u "/var/local/blacktar/$bucket") | grep '^<' | cut -c 3- | "$dir"/../lib/blacktar/hashes_of_hmacs "$tmp/$$/hash_lookup_table" > "$tmp/$$/diff.hashes"
 rm "$tmp/$$/hash_lookup_table" "$tmp/$$/db"
 if	[ ! -f "$tmp/$$/diff.hashes" ]
 	then rm -rf "$tmp/$$"; exit; fi
@@ -95,8 +91,8 @@ if	[ ! -f "$tmp/$$/diff.hashes" ]
 while IFS= read -r -d '' line; do
 	hash=`echo -n "$line" | cut -c 1-64`
 	path=`echo -n "$line" | cut -c 65-`
-	s3_put "${argv[$OPTIND+1]}" "$hash" "$path"
-	done < <("$dir"/../lib/verity/paths "$tmp/$$/stdin-copy" < "$tmp/$$/diff.hashes")
+	s3_put "$bucket" "$hash" "$path"
+	done < <("$dir"/../lib/verity/paths "$tmp/$$/stdin-sorted" < "$tmp/$$/diff.hashes")
 
 rm -rf "$tmp/$$"
 
