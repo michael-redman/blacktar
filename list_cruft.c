@@ -14,24 +14,15 @@ extern int read_whole_file(char const * const, unsigned char **, unsigned int *)
 #define AT fprintf(stderr,"at "__FILE__":%u\n",__LINE__)
 #define SQLERR fputs(PQerrorMessage(db),stderr)
 
-int compar(const void *a, const void *b){ return memcmp(a,b,2*SHA256_DIGEST_LENGTH); }
+#define S3_KEY_MAX_LEN 1024
 
-#define HMAC_LOOP \
-	while	(!feof(stdin)) { \
-		if (!fgets(hmac_text,2*SHA256_DIGEST_LENGTH+2,stdin)) break; \
-		hmac_text[2*SHA256_DIGEST_LENGTH]='\0'; \
-		if (n_alloc==n_data) { \
-			n_alloc=1+3*n_alloc; \
-			hmacs=realloc(hmacs, 2*SHA256_DIGEST_LENGTH*n_alloc); \
-			if (!hmacs) { fputs("realloc failed\n",stderr); goto l1; }} \
-		strcpy(&hmacs[2*SHA256_DIGEST_LENGTH*n_data++],hmac_text); } \
-	if (ferror(stdin)) { perror("stdin"); goto l1; }
+int compar(const void *a, const void *b){ return memcmp(a,b,2*SHA256_DIGEST_LENGTH); }
 
 int main (int argc, char ** argv) {
 	PGconn *db;
 	PGresult *result;
 	unsigned int key_l, n_alloc=0, n_data=0;
-	char *hmacs=NULL, hmac_text[2*SHA256_DIGEST_LENGTH+2];
+	char *hmacs=NULL, hmac_text[2*SHA256_DIGEST_LENGTH+2], s3_key[S3_KEY_MAX_LEN+2];
 	unsigned char *hmac_binary, *key;
 	if (argc!=2) { fputs(USE,stderr); return 1; }
 	if (read_whole_file(argv[2],&key,&key_l)) { perror(argv[2]); return 1; }
@@ -58,7 +49,8 @@ int main (int argc, char ** argv) {
 	PQfinish(db);
 	qsort(hmacs,n_data,2*SHA256_DIGEST_LENGTH,compar);
 	while	(!feof(stdin))
-		{	if (!fgets(hmac_text,2*SHA256_DIGEST_LENGTH+2,stdin)) break;
+		{	if (!fgets(s3_key,S3_KEY_MAX_LEN+2,stdin)) break;
+			strncpy(hmac_text,s3_key,2*SHA256_DIGEST_LENGTH);
 			hmac_text[2*SHA256_DIGEST_LENGTH]='\0';
 			if (!bsearch(hmac_text,hmacs,n_data,2*SHA256_DIGEST_LENGTH,compar)) puts(hmac_text); }
 	if (hmacs) free(hmacs);

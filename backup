@@ -63,7 +63,7 @@ function s3_put { #s3-bucket-name hash path
 			while [ $(($RANDOM%$modulus)) -ne 0 ]; do sleep 60; done
 			modulus=$(($modulus+1)); done
 		rm "$tmp/$$/$hmac"
-		echo "$hmac" >> /var/local/blacktar/"$1"
+		echo "$hmac" >> /var/local/cache/blacktar/"$1"
 		echo "put: finished $2 $3" >&2
 		echo "$2$3"; }
 
@@ -79,11 +79,11 @@ while IFS= read -r -d '' line; do
 rm "$tmp/$$/hashes.in"
 cut -d ' ' -f 1 < "$tmp/$$/hash_lookup_table" > "$tmp/$$/db"
 
-if	[ ! -f "/var/local/blacktar/$bucket" ]
+if	[ ! -f "/var/local/cache/blacktar/$bucket" ]
 	then	s3_list_keys "$bucket" | sort -u \
-		> "/var/local/blacktar/$bucket"; fi
+		> "/var/local/cache/blacktar/$bucket"; fi
 
-diff "$tmp/$$/db" <(sort -u "/var/local/blacktar/$bucket") | grep '^<' | cut -c 3- | "$dir"/../lib/blacktar/hashes_of_hmacs "$tmp/$$/hash_lookup_table" > "$tmp/$$/diff.hashes"
+diff "$tmp/$$/db" <(sort -u "/var/local/cache/blacktar/$bucket") | grep '^<' | cut -c 3- | "$dir"/../lib/blacktar/hashes_of_hmacs "$tmp/$$/hash_lookup_table" > "$tmp/$$/diff.hashes"
 rm "$tmp/$$/hash_lookup_table" "$tmp/$$/db"
 if	[ ! -f "$tmp/$$/diff.hashes" ]
 	then rm -rf "$tmp/$$"; exit; fi

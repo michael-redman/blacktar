@@ -16,24 +16,6 @@ Blacktar also caches a list of which hashes are on S3 so it doesn't have to list
 
 Blacktar uses the Verity content tracking system to map between hashes and paths on your file system where content can be found or needs to be restored.
 
-LIMITATIONS
-
-Because Blacktar needs your Verity database to do restores, you must keep a backup of the database dump outside of Blacktar.
-
-When indexing your files with Verity, you must use full pathnames (with the leading "/") or Blacktar will not be able to link to your files from the tempdir while backing them up.
-
-See the note in the Verity README on the importance of a correct system clock.
-
-Blacktar will refuse to back up files that have changed since you last indexed them with verity_index_paths.  If it takes a long time for the index and backup to run on your data set, this could cause volatile files not to be backed up for an indefinite number of index-backup cycles.
-
-Filenames, their SHA-256 hashes, and the HMAC signatures of those hashes, are visible to other users in the output of "ps".
-
-Blacktar inherits the limitations of all its dependencies, including Verity and libs3.  See the documentation for those projects for more information.
-
-Blacktar will not work with pathnames that are close to the system maximum length, because it concatenates the target root you specify for restoring with the original path you backed up.
-
-Blacktar uses the same passphrase for both GPG encryption and for calculating the HMACs of the file hashes.  By default Blacktar does not do anything to obscure the sizes of your files, although there is a naieve routine in the backup script you can uncomment, which will add a file of noise to each data file's tar archive before encrypting.
-
 INSTALLING
 
 Blacktar was developed on Debian Linux and has not yet been compiled or tested on other systems.
@@ -48,27 +30,6 @@ Blacktar builds with the standard "make" and "make install" commands.
 
 See the note in the Verity documentation about memory usage.  Blacktar also supports the QUERY_TYPE=CORRELATED_SUBQUERY make option.
 
-USE
-
-Example commands to index, backup, & restore a tree, and compare the restored tree to the original:
-
-you@yourhost:~$ { find /some/tree/ -print0; verity_list_paths -p /some/tree/ dbname=verity_example_db; } | sort -uz | verity_index_paths dbname=verity_example_db
-you@yourhost:~$ export S3_ACCESS_KEY_ID=your_access_key
-you@yourhost:~$ export S3_SECRET_ACCESS_KEY=your_secret_key
-you@yourhost:~$ blacktar_backup -p /some/tree/ dbname=verity_example_db <(echo -n "my passphrase") s3_bucket_name
-you@yourhost:~$ blacktar_restore -p /some/tree/ dbname=verity_example_db <(echo -n "my passphrase") s3_bucket_name /tmp/new-root/
-you@yourhost:~$ diff -r /some/tree/ /tmp/new-root/some/tree/
-
-If you do not specify a path prefix with -p like in the example, Blacktar will back up or restore all files in your Verity database.
-
-You may also specify a Unix timestamp as the -t option to blacktar_restore, which will restore the paths to the state as of the most recent Verity indexing less than or equal to the time you specifiey.  e.g., -t `date -d '20140214' +%s`
-
-The backup and restore commands pass the database connection string to libpq unmodified.  See the libpq documentation for the full syntax.
-
-If a system's cache of which files are already backed up to S3 becomes invalid (for example because you ran blacktar_backup on another computer, so this one doesn't know about the files backed up in that run), rebuild it with "s3_list_keys bucket_name | sort -u > /var/local/blacktar/bucket_name".
-
-There is a bug affecting Blacktar and the above example on user accounts where gpg has never been run before.  Blacktar does not recognize messages like "gpg: directory `/home/ec2-user/.gnupg' created" as benign, and will abort backing up the current file.  Blacktar will backup any aborted files on the next run(s) when gpg is done printing its setup messages, or you can work around the bug entirely by manually encrypting a file with gpg before ever running blacktar_backup.
-
-If the "s3" command gives you an error about not being able to find a shared library, you may need to run ldconfig on libs3's lib directory (probably /usr/local/lib?)
+After installing please read the use examples and design limitations in the blacktar(7) manual page.
 
 IN GOD WE TRVST.

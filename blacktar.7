@@ -1,0 +1,75 @@
+.TH BLACKTAR 7
+.SH NAME
+blacktar \- content-addressed, encrypted backup
+.SH DESCRIPTION
+.B blacktar
+backs your files up to Amazon S3.
+
+Because Blacktar stores your files by HMAC signatures calculated from the hashes of your files in your Verity database, (1) it recognizes duplicate files and keeps only one backup of the file, (2) it doesn't re-backup unchanged content that has been moved or renamed, (3) and you can do as many "incremantal" backups and garbage-collections as you want without ever having do do another "full" backup.
+
+Blacktar also caches a list of which hashes are on S3 so it doesn't have to list out your S3 bucket each backup run.
+
+Blacktar uses the Verity content tracking system to map between HMAC signatures on S3 and paths on your file system.
+
+Blacktar consists of the commands
+.B blacktar_backup, blacktar_restore,
+and
+.B blacktar_list_cruft.
+.SH EXAMPLE COMMANDS
+Set the environment variables for the "s3" command:
+
+you@yourhost:~$ export S3_ACCESS_KEY_ID=your_access_key
+
+you@yourhost:~$ export S3_SECRET_ACCESS_KEY=your_secret_key
+
+If the "s3" command gives you an error about not being able to find a shared library, you may need to run ldconfig on libs3's lib directory (probably /usr/local/lib?)
+
+Back up all content in your Verity database that is not already backed up:
+
+you@yourhost:~$ verity_list -c dbname=my_verity_db | blacktar_backup passphrase_file your_s3_bucket
+
+If a system's cache of which files are already backed up to S3 becomes invalid (for example because you ran blacktar_backup on another computer, so this one doesn't know about the files backed up in that run), rebuild it with "s3_list_keys bucket_name | sort -u > /var/local/cache/blacktar/bucket_name".
+
+Restore the tree /some/tree into /tmp/restore:
+
+you@yourhost:~$ verity_list dbname=my_verity_db | grep -z '^/some/tree/' | blacktar_restore -r /tmp/restore/ dbname=my_verity_db passphrase_file your_s3_bucket
+
+You may also specify a Unix timestamp as the -t option to blacktar_restore, which will restore the paths to the state as of the most recent Verity indexing less than or equal to the time you specifiey.  e.g., -t `date -d '20140214' +%s`
+
+The backup and restore commands pass the database connection string to libpq unmodified.  See the libpq documentation for the full syntax.
+
+List keys in S3 bucket that do not match any content in your Verity database:
+
+you@yourhost:~$ s3_list_keys your_s3_bucket | blacktar_list_cruft dbname=my_verity_db passphrase_file
+
+.SH LIMITATIONS
+
+Because Blacktar needs your Verity database to do restores, you must keep a backup of the database dump outside of Blacktar.
+
+When indexing your files with Verity, you must use full pathnames (with the leading "/") or Blacktar will not be able to link to your files from the tempdir while backing them up.
+
+See the note in the Verity manual page on the importance of a correct system clock.
+
+Blacktar will refuse to back up files that have changed since you last indexed them with verity_index_paths.  If it takes a long time for the index and backup to run on your data set, this could cause volatile files not to be backed up for an indefinite number of index-backup cycles.
+
+Filenames, their SHA-256 hashes, and the HMAC signatures of those hashes, are visible to other users in the output of "ps".
+
+Blacktar will not work with pathnames that are close to the system maximum length, because it concatenates the target root you specify for restoring with the original path you backed up.
+
+Blacktar uses the same passphrase for both GPG encryption and for calculating the HMACs of the file hashes.
+
+By default Blacktar does not do anything to obscure the sizes of your files, although there is a naieve routine in the backup script you can uncomment, which will add a file of noise to each data file's tar archive before encrypting.
+
+It is your responsibility to manage the permissions of /var/local/cache/blacktar.
+
+.SH BUGS
+
+Nothing has yet been done to ensure secure permissions for Blacktar's temporary files.  
+
+There is a bug affecting Blacktar and the above example on user accounts where gpg has never been run before.  Blacktar does not recognize messages like "gpg: directory `/home/ec2-user/.gnupg' created" as benign, and will abort backing up the current file.  Blacktar will backup any aborted files on the next run(s) when gpg is done printing its setup messages, or you can work around the bug entirely by manually encrypting a file with gpg before ever running blacktar_backup.
+
+.SH AUTHOR
+
+Michael Redman <michael.redman.4@gmail.com>
+
+.SH IN GOD WE TRVST.
