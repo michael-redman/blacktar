@@ -1,4 +1,4 @@
-#define USE "hashes_of_hmacs file_made_by_hmacs_of_hashes < hmac_list"
+#define USE "hashes file_made_by_hmacs < hmac_list"
 
 #include <openssl/sha.h>
 #include <stdio.h>
