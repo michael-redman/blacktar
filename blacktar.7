@@ -28,7 +28,7 @@ Back up all content in your Verity database that is not already backed up:
 
 you@yourhost:~$ verity_list -c dbname=my_verity_db | blacktar_backup passphrase_file your_s3_bucket
 
-If a system's cache of which files are already backed up to S3 becomes invalid (for example because you ran blacktar_backup on another computer, so this one doesn't know about the files backed up in that run), rebuild it with "s3_list_keys bucket_name | sort -u > /var/local/cache/blacktar/bucket_name".
+If a system's cache of which files are already backed up to S3 becomes invalid (for example because you ran blacktar_backup on another computer, so this one doesn't know about the files backed up in that run), rebuild it with "blacktar_s3_list_keys bucket_name | sort -u > /var/local/cache/blacktar/bucket_name".
 
 Restore the tree /some/tree into /tmp/restore:
 
@@ -40,7 +40,9 @@ The backup and restore commands pass the database connection string to libpq unm
 
 List keys in S3 bucket that do not match any content in your Verity database:
 
-you@yourhost:~$ s3_list_keys your_s3_bucket | blacktar_list_cruft dbname=my_verity_db passphrase_file
+you@yourhost:~$ blacktar_s3_list_keys your_s3_bucket | blacktar_list_cruft dbname=my_verity_db passphrase_file
+
+If you run blacktar_backup with the "-s spooLdir" option, then instead of uploading your backup archives, the backup script will copy them to the directory you specify, in case you want to move them to S3 another way (e.g. by first using rsync to get the archives to a host with a better Internet connection, since unlike rsync libs3 cannot resume a "put" where it left off after a broken network connection).  If you use this option it is your responsibility to update the cache in /var/local/blacktar/bucket_name.  The script blacktar_put_spool will put the archives in a spool dir to S3.
 
 .SH LIMITATIONS
 

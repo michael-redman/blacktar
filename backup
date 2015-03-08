@@ -1,11 +1,17 @@
 #!/bin/bash
 
-USE="verity_list -c ... | grep -z ... | blacktar_backup /key/file s3-bucket"
+USE="verity_list -c ... | blacktar_backup [ -s spool_dir ] /key/file s3-bucket"
 
 dir=`cd $(dirname $0) && pwd`
 
-passphrase_xxd="`xxd $1`"
-bucket="$2"
+argv=("$@")
+while	getopts "s:" opt; do
+	case	"$opt" in
+		s)	spool_dir="$OPTARG";;
+		\?)	echo "$USE" >&2; exit 1;; esac; done
+if [ $(($#-$OPTIND)) -ne 1 ]; then echo "$USE"; exit 1; fi
+passphrase_xxd="`xxd \"${argv[$OPTIND-1]}\"`"
+bucket="${argv[$OPTIND]}"
 
 if [ ! "$tmp" ]; then tmp=/tmp; fi
 mkdir "$tmp/$$"
@@ -25,7 +31,7 @@ function s3_put { #s3-bucket-name hash path
 		rm -rf "$tmp/$$/$2.d"
 		return 1; fi
 	rm "$tmp/$$/$2.d"/*
-	md5=`openssl dgst -md5 -binary "$tmp/$$/$hmac" | openssl enc -base64`
+	md5=`md5sum "$tmp/$$/$hmac" | cut -d ' ' -f 1`
 	( gpg --batch --no-tty --passphrase-fd 3 3< <(echo -n "$passphrase_xxd" | xxd -r) < "$tmp/$$/$hmac" | tar xCf "$tmp/$$/$2.d" - ) 2> "$tmp/$$/err"
 #	err=`grep -v -e 'gpg: CAST5 encrypted data' -e 'gpg: encrypted with 1 passphrase' -e 'gpg: WARNING: message was not integrity protected' "$tmp/$$/err"`
 	err=`grep -v -e 'gpg: CAST5 encrypted data' -e 'gpg: encrypted with 1 passphrase' "$tmp/$$/err"`
@@ -35,37 +41,30 @@ function s3_put { #s3-bucket-name hash path
 		rm "$tmp/$$/$hmac"
 		rm -rf "$tmp/$$/$2.d"
 		return 1; fi 
-	if
-		[ ! -f "$tmp/$$/$2.d/$2" ]; then
+	if	[ ! -f "$tmp/$$/$2.d/$2" ]; then
 		echo "blacktar verify: missing from archive: $2 ( $3 )" >&2
 		rm "$tmp/$$/$hmac"
 		rm -rf "$tmp/$$/$2.d"
 		return 1; fi
 	test_hmac=`sha256sum "$tmp/$$/$2.d/$2" | cut -d ' ' -f 1`
-	if
-		[ ! "$test_hmac" -o \( "$2" != "$test_hmac" \) ]
-		then
-			rm -rf "$tmp/$$/$2.d"
+	if	[ ! "$test_hmac" -o \( "$2" != "$test_hmac" \) ]
+		then	rm -rf "$tmp/$$/$2.d"
 			rm "$tmp/$$/$hmac"
 			echo "put: aborting on checksum mismatch: $2 $3" 1>&2
 			echo "$2"
 			return 1; fi
-
-		rm -rf "$tmp/$$/$2.d"
-		r=1
-		modulus=1
-		while [ $r -ne 0 ]; do
-			err=$(s3 -u put "$1/$hmac" filename="$tmp/$$/$hmac" md5="$md5" 2>&1 | grep -vE '^[0-9]+ bytes remaining \([0-9]{1,3}% complete\) \.\.\.'; exit ${PIPESTATUS[0]})
-			r=$?
-			if [ $r -ne 0 ]; then echo "s3 returned $r" >&2; fi
-			if [ "$err" ]; then echo "$err" >&2; r=1; fi
-			if [ $r -eq 0 ]; then break; fi
-			while [ $(($RANDOM%$modulus)) -ne 0 ]; do sleep 60; done
-			modulus=$(($modulus+1)); done
-		rm "$tmp/$$/$hmac"
-		echo "$hmac" >> /var/local/cache/blacktar/"$1"
-		echo "put: finished $2 $3" >&2
-		echo "$2$3"; }
+	rm -rf "$tmp/$$/$2.d"
+	if	[ "$spool_dir" ]
+		then	echo "put: copying $hmac to $spool_dir instead of uplaoding direclty" >&2
+			mkdir -p "$spool_dir"
+			mv -i "$tmp/$$/$hmac" "$spool_dir/$hmac.$md5"
+		else	md5=`echo $md5 | xxd -p -r | openssl enc -base64`
+			blacktar_s3_put "$1/$hmac" filename="$tmp/$$/$hmac" md5="$md5"
+			rm "$tmp/$$/$hmac"
+			echo "$hmac" >> /var/local/cache/blacktar/"$1"
+			fi
+	echo "put: finished $2 $3" >&2
+	echo "$2$3"; }
 
 cat /dev/stdin > "$tmp/$$/stdin-buf"
 
@@ -80,7 +79,7 @@ rm "$tmp/$$/hashes.in"
 cut -d ' ' -f 1 < "$tmp/$$/hash_lookup_table" > "$tmp/$$/db"
 
 if	[ ! -f "/var/local/cache/blacktar/$bucket" ]
-	then	s3_list_keys "$bucket" | sort -u \
+	then	blacktar_s3_list_keys "$bucket" | sort -u \
 		> "/var/local/cache/blacktar/$bucket"; fi
 
 diff "$tmp/$$/db" <(sort -u "/var/local/cache/blacktar/$bucket") | grep '^<' | cut -c 3- | "$dir"/../lib/blacktar/hashes "$tmp/$$/hash_lookup_table" > "$tmp/$$/diff.hashes"
