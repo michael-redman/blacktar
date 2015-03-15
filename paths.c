@@ -8,8 +8,6 @@
 #include <string.h>
 #include <time.h>
 
-#include <fgetsnull.h>
-
 #include "at.h"
 
 #define HASH_LEN (2*SHA256_DIGEST_LENGTH)

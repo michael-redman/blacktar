@@ -4,7 +4,7 @@ exec_prefix?=$(prefix)
 CFLAGS=-Wall -g -fstack-protector -O2 -I $(prefix)/include
 ECPG_CFLAGS=-I /usr/include/postgresql
 LDFLAGS=-L $(prefix)/lib
-LDADD=-lhexbytes -lfgetsnull -lpq 
+LDADD=-lhexbytes -lpq 
 QUERY_TYPE?=JOIN
 
 PROGS=restore list_cruft

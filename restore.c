@@ -49,28 +49,23 @@ Third, loop thru the table of directories, making any that do not yet exist and 
 #include <unistd.h>
 #include <utime.h>
 
-#include <fgetsnull.h>
 #include <hexbytes.h>
 
 #include "err.h"
 
 extern int read_whole_file (char const * const path, unsigned char **buf, unsigned int *data_size);
 
-char * restore_root=NULL;
-unsigned int restore_root_len;
+char * restore_root=".";
+unsigned int restore_root_len=1;
 
-void build_restore_path
+char build_restore_path
 (char const * const path, char * const outbuf)
-{	int l=strlen(path);
-	if	(!restore_root)
-		{	strncpy(outbuf,path,PATH_MAX);
-			outbuf[strlen(path)]='\0'; }
-		else{	strncpy(outbuf,restore_root,restore_root_len);
-			outbuf[restore_root_len]='/';
-			if	(path[0]=='/')
-				strncpy(&outbuf[restore_root_len+1],&path[1],--l);
-				else strncpy(&outbuf[restore_root_len+1],path,l);
-			outbuf[restore_root_len+l+1]='\0'; } }
+{	char const *p=path;
+	while (*p=='/') p++;
+	if	(snprintf(outbuf,PATH_MAX+1,"%s/%s",restore_root,p)>=PATH_MAX+1)
+		{	fprintf(stderr,"path truncated: %s/%s\n",restore_root,p);
+			return 1; }
+	return 0; }
 
 int mkdir_recursive
 (char * const path)
@@ -121,7 +116,8 @@ int main
 	unsigned int key_len;
 	char	path_ar0[PATH_MAX+1], path_ar1[PATH_MAX+1],
 		hmac_text[2*SHA256_DIGEST_LENGTH+1],
-		hash[2*SHA256_DIGEST_LENGTH+1], return_value=0;
+		hash[2*SHA256_DIGEST_LENGTH+1], return_value=0, *buf=NULL;
+	size_t buf_len=0;
 	unsigned char * key, *hmac_binary;
 	PGresult * result0, * result1;
 	FILE * hashes_tmpfile, *dirs_tmpfile, *child_stdout;
@@ -132,7 +128,7 @@ int main
 		case 'r':
 			restore_root=optarg;
 			restore_root_len=strlen(restore_root);
-			if	(restore_root[restore_root_len-1]=='/')
+			while	(restore_root[restore_root_len-1]=='/')
 				restore_root[--restore_root_len]='\0';
 			break;
 		case 't': t=htobe64(strtoll(optarg,NULL,10)); break;
@@ -143,6 +139,7 @@ int main
 	PGconn * db=PQconnectdb(argv[optind]);
 	if(PQstatus(db)!=CONNECTION_OK){
 		fputs(PQerrorMessage(db),stderr);
+		free(key);
 		exit(EXIT_FAILURE); }
 	if	(	!(hashes_tmpfile = tmpfile())
 			|| !(dirs_tmpfile = tmpfile()))
@@ -156,7 +153,7 @@ int main
 
 	//Part 1
 	while	(!feof(stdin))
-		{	if (!fgetsnull(path_ar0,PATH_MAX+1,stdin)) break;
+		{	if (getdelim(&buf,&buf_len,'\0',stdin)==-1) break;
 			result0=PQexecParams(db,
 				"select "\
 					"mode, uid, gid, mtime, content "\
@@ -164,13 +161,13 @@ int main
 					"where path=$1 and not exists (select * from paths as alias where alias.path=paths.path and alias.xtime>paths.xtime and alias.xtime<$2)",
 				2,NULL,
 				(char const * const []){
-					path_ar0,
+					buf,
 					(char const * const)&t },
 				(int const []){0, sizeof(uint64_t) },
 				(int const []){0,1},1);
 			SQLCHECK(db,result0,PGRES_TUPLES_OK,err1);
 			if	(!PQntuples(result0))
-				{	fprintf(stderr, "error in stdin read loop: no current record found for path %s\n",path_ar0);
+				{	fprintf(stderr, "error in stdin read loop: no current record found for path %s\n",buf);
 					PQclear(result0);
 					continue; }
 			if	(	PQgetisnull(result0,0,0)
@@ -185,7 +182,7 @@ int main
 					uid=ntohl(*(uint32_t *)PQgetvalue(result0,0,1));
 					gid=ntohl(*(uint32_t *)PQgetvalue(result0,0,2));
 					mtime=be64toh(*(uint64_t *)PQgetvalue(result0,0,3));
-					if	(	fputs(path_ar0,dirs_tmpfile)==EOF
+					if	(	fputs(buf,dirs_tmpfile)==EOF
 							|| fputc(0,dirs_tmpfile)
 							|| fwrite(&mode,sizeof(mode_t),1,dirs_tmpfile)!=1
 							|| fwrite(&uid,sizeof(uid_t),1,dirs_tmpfile)!=1
@@ -203,7 +200,7 @@ int main
 						PQgetvalue(result0,0,4));
 					result1=PQexecParams(db,
 						"insert into paths_to_restore values($1)",1,
-						NULL, (char const * const []){ path_ar0 },
+						NULL, (char const * const []){ buf },
 						(int const []){ 0 }, (int const []){0},0);
 						SQLCHECK(db,result1,PGRES_COMMAND_OK,err2);
 						PQclear(result1);
@@ -212,7 +209,9 @@ int main
 					if	(PQgetisnull(result0,0,4))
 						{	fputs("sanity check failed\n",stderr); AT;
 							goto err1; }
-					build_restore_path(path_ar0,path_ar1);
+					if	(build_restore_path(buf,path_ar1))
+						{	fputs("build restore path failed\n",stderr); AT;
+							goto err1; }
 					strcpy(path_ar0,path_ar1);
 					//dirname modifies arg
 					mkdir_recursive(dirname(path_ar1));
@@ -293,7 +292,9 @@ int main
 					SQLCHECK(db,result1,PGRES_TUPLES_OK,err2);
 					if(!PQntuples(result1)) break;
 					if	(!path_ar0[0])
-						{	build_restore_path(PQgetvalue(result1,0,0),path_ar0);
+						{	if	(build_restore_path(PQgetvalue(result1,0,0),path_ar0))
+								{	fputs("build restore path failed\n",stderr); AT;
+									goto err2; }
 							hmac_binary=HMAC(EVP_sha256(),key,key_len,(unsigned char const *)hash,2*SHA256_DIGEST_LENGTH,NULL,NULL);
 							hexbytes_print(hmac_binary,SHA256_DIGEST_LENGTH,hmac_text);
 							if	(pipe(pipe_fd))
@@ -325,7 +326,9 @@ int main
 									strtol(PQgetvalue(result0,0,5),NULL,10),
 									strtoll(PQgetvalue(result0,0,6),NULL,10)))
 								AT; }
-						 else{	build_restore_path(PQgetvalue(result1,0,0),path_ar1);
+						 else{	if	(build_restore_path(PQgetvalue(result1,0,0),path_ar1))
+								{	fputs("build restore path failed\n",stderr); AT;
+									goto err2; }
 							if	(link(path_ar0,path_ar1))
 								{ perror(path_ar1); AT; goto err2; }}
 					PQclear(result1); }
@@ -346,30 +349,36 @@ int main
 		{	perror("seek on dirs tmpfile failed\n");
 			AT; exit(EXIT_FAILURE); }
 	while	(!feof(dirs_tmpfile))
-		{	if (!fgetsnull(path_ar0,PATH_MAX+1,dirs_tmpfile)) break;
-			sprintf(path_ar1,"%s/%s",restore_root,path_ar0);
-			if	(mkdir_recursive(path_ar1))
+		{	if (getdelim(&buf,&buf_len,'\0',dirs_tmpfile)==-1) break;
+			if	(build_restore_path(buf,path_ar0))
+				{	fputs("build_restore_path failed\n",stderr);
+					AT; goto label0; }
+			if	(mkdir_recursive(path_ar0))
 				{	fputs("recursive directory create failed\n",stderr);
-					perror(path_ar1);
-					exit(EXIT_FAILURE); }
+					perror(path_ar0);
+					goto label0; }
 			if	(	fread(&mode,sizeof(mode_t),1,dirs_tmpfile)!=1
 					|| fread(&uid,sizeof(uid_t),1,dirs_tmpfile)!=1
 					|| fread(&gid,sizeof(gid_t),1,dirs_tmpfile)!=1
 					|| fread(&mtime,sizeof(time_t),1,dirs_tmpfile)!=1)
-				{	fprintf(stderr,"failed reading mode/owner/mtime info from dirs tmpfile: %s\n",path_ar0);
+				{	fprintf(stderr,"failed reading mode/owner/mtime info from dirs tmpfile for file: %s\n",path_ar0);
 					perror(NULL);
-					exit(EXIT_FAILURE); }
-			if (set_perms(path_ar1,mode,uid,gid,mtime)) AT; }
+					goto label0; }
+			if (set_perms(path_ar0,mode,uid,gid,mtime)) AT; }
+	if (ferror(stdin)) { perror("stdin"); AT; goto label0; }
+	free(buf);
 	if	(fclose(dirs_tmpfile))
 		{	fputs("error closing dirs tmpfile\n",stderr); AT;
 			perror(NULL);
 			exit(EXIT_FAILURE); }
-
 	exit(return_value);
+	label0:	free(buf);
+		return 1;
 	err2:	PQclear(result1);
 	err1:	PQclear(result0);
 	err0:	PQfinish(db);
 		free(key);
+		free(buf);
 		exit(EXIT_FAILURE); }
 	
 /*IN GOD WE TRVST.*/
