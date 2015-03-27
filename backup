@@ -1,17 +1,19 @@
 #!/bin/bash
 
-USE="verity_list -c ... | blacktar_backup [ -s spool_dir ] /key/file s3-bucket"
+USE="verity_list -c ... | blacktar_backup [ -s spool_dir ] [ -l limit_bytes ] /key/file s3-bucket"
 
 dir=`cd $(dirname $0) && pwd`
 
 argv=("$@")
-while	getopts "s:" opt; do
+while	getopts "s:l:" opt; do
 	case	"$opt" in
 		s)	spool_dir="$OPTARG";;
+		l)	limit="$OPTARG";;
 		\?)	echo "$USE" >&2; exit 1;; esac; done
 if [ $(($#-$OPTIND)) -ne 1 ]; then echo "$USE"; exit 1; fi
 passphrase_xxd="`xxd \"${argv[$OPTIND-1]}\"`"
 bucket="${argv[$OPTIND]}"
+total=0
 
 if [ ! "$tmp" ]; then tmp=/tmp; fi
 mkdir "$tmp/$$"
@@ -54,8 +56,9 @@ function s3_put { #s3-bucket-name hash path
 			echo "$2"
 			return 1; fi
 	rm -rf "$tmp/$$/$2.d"
+	total=`echo $total+$(stat -c %s "$tmp/$$/$hmac") | bc -l`
 	if	[ "$spool_dir" ]
-		then	echo "put: copying $hmac to $spool_dir instead of uplaoding direclty" >&2
+		then	echo "put: copying $hmac to $spool_dir instead of uplaoding directly" >&2
 			mkdir -p "$spool_dir"
 			mv -i "$tmp/$$/$hmac" "$spool_dir/$hmac.$md5"
 		else	md5=`echo $md5 | xxd -p -r | openssl enc -base64`
@@ -91,6 +94,8 @@ while IFS= read -r -d '' line; do
 	hash=`echo -n "$line" | cut -c 1-64`
 	path=`echo -n "$line" | cut -c 65-`
 	s3_put "$bucket" "$hash" "$path"
+	if	[ "$limit" ]
+		then if	[ "$total" -gt "$limit" ]; then break; fi; fi
 	done < <("$dir"/../lib/blacktar/paths "$tmp/$$/stdin-sorted" < "$tmp/$$/diff.hashes")
 
 rm -rf "$tmp/$$"

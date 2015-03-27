@@ -5,13 +5,13 @@ blacktar \- content-addressed, encrypted backup
 .B blacktar
 backs your files up to Amazon S3.
 
-Because Blacktar stores your files by HMAC signatures calculated from the hashes of your files in your Verity database, (1) it recognizes duplicate files and keeps only one backup of the file, (2) it doesn't re-backup unchanged content that has been moved or renamed, (3) and you can do as many "incremantal" backups and garbage-collections as you want without ever having do do another "full" backup.
+Blacktar (1) recognizes duplicate files and keeps only one backup of the file, (2) doesn't re-backup unchanged content that has been moved or renamed, and (3) can do as many "incremantal" backups and garbage-collections as you want without ever having do do another "full" backup.
+
+Blacktar achieves these efficiencies by naming and looking up your files in the backup store by a content signature instead of by the path names on your system.  Blacktar uses the Verity content tracking system to map between signatures on S3 and paths on your file system.
 
 Blacktar also caches a list of which hashes are on S3 so it doesn't have to list out your S3 bucket each backup run.
 
-Blacktar uses the Verity content tracking system to map between HMAC signatures on S3 and paths on your file system.
-
-Blacktar consists of the commands
+The main commands are
 .B blacktar_backup, blacktar_restore,
 and
 .B blacktar_list_cruft.
@@ -44,6 +44,8 @@ you@yourhost:~$ blacktar_s3_list_keys your_s3_bucket | blacktar_list_cruft dbnam
 
 If you run blacktar_backup with the "-s spooLdir" option, then instead of uploading your backup archives, the backup script will copy them to the directory you specify, in case you want to move them to S3 another way (e.g. by first using rsync to get the archives to a host with a better Internet connection, since unlike rsync libs3 cannot resume a "put" where it left off after a broken network connection).  If you use this option it is your responsibility to update the cache in /var/local/blacktar/bucket_name.  The script blacktar_put_spool will put the archives in a spool dir to S3.
 
+The "-l limit_bytes" option tells blacktar_backup to exit after the first file exceeding limit_bytes of backup files created, which addresses the case where the spool devices are smaller than the data set to be backed up, and the backup has to be done in "parts".
+
 .SH LIMITATIONS
 
 Because Blacktar needs your Verity database to do restores, you must keep a backup of the database dump outside of Blacktar.
@@ -58,17 +60,19 @@ Filenames, their SHA-256 hashes, and the HMAC signatures of those hashes, are vi
 
 Blacktar will not work with pathnames that are close to the system maximum length, because it concatenates the target root you specify for restoring with the original path you backed up.
 
-Blacktar uses the same passphrase for both GPG encryption and for calculating the HMACs of the file hashes.
+Like Verity, Blacktar ignores FIFOs, sockets, and device special files.
+
+Blacktar uses the same passphrase for both GPG encryption and for calculating the HMACs of the file hashes in your Verity database.
 
 By default Blacktar does not do anything to obscure the sizes of your files, although there is a naieve routine in the backup script you can uncomment, which will add a file of noise to each data file's tar archive before encrypting.
 
 It is your responsibility to manage the permissions of /var/local/cache/blacktar.
 
-.SH BUGS
-
 Nothing has yet been done to ensure secure permissions for Blacktar's temporary files.  
 
-There is a bug affecting Blacktar and the above example on user accounts where gpg has never been run before.  Blacktar does not recognize messages like "gpg: directory `/home/ec2-user/.gnupg' created" as benign, and will abort backing up the current file.  Blacktar will backup any aborted files on the next run(s) when gpg is done printing its setup messages, or you can work around the bug entirely by manually encrypting a file with gpg before ever running blacktar_backup.
+.SH BUGS
+
+There is a bug affecting Blacktar and the above usage example on user accounts where gpg has never been run before.  Blacktar does not recognize messages like "gpg: directory `/home/ec2-user/.gnupg' created" as benign, and will abort backing up the current file.  Blacktar will backup any aborted files on the next run(s) when gpg is done printing its setup messages, or you can work around the bug entirely by manually encrypting a file with gpg before ever running blacktar_backup.
 
 .SH AUTHOR
 
