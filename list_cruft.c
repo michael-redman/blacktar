@@ -21,13 +21,15 @@ int compar(const void *a, const void *b){ return memcmp(a,b,2*SHA256_DIGEST_LENG
 int main (int argc, char ** argv) {
 	PGconn *db;
 	PGresult *result;
-	unsigned int key_l, n_alloc=0, n_data=0;
+	unsigned int key_l, n_alloc=0, n_data=0, tmp0;
 	char *hmacs=NULL, hmac_text[2*SHA256_DIGEST_LENGTH+2], s3_key[S3_KEY_MAX_LEN+2];
 	unsigned char *hmac_binary, *key;
-	if (argc!=2) { fputs(USE,stderr); return 1; }
+	if (argc!=3) { fputs(USE,stderr); return 1; }
 	if (read_whole_file(argv[2],&key,&key_l)) { perror(argv[2]); return 1; }
 	db=PQconnectdb(argv[1]);
 	if (PQstatus(db)!=CONNECTION_OK){ SQLERR; AT; goto l0; }
+	result=PQexec(db,"begin");
+	if (PQresultStatus(result)!=PGRES_COMMAND_OK){ SQLERR; AT; goto l1; }
 	result=PQexec(db,"declare hashes cursor for select content from inodes where mode/4096=8");
 	if (PQresultStatus(result)!=PGRES_COMMAND_OK){ SQLERR; AT; goto l1; }
 	PQclear(result);
@@ -52,6 +54,8 @@ int main (int argc, char ** argv) {
 		{	if (!fgets(s3_key,S3_KEY_MAX_LEN+2,stdin)) break;
 			strncpy(hmac_text,s3_key,2*SHA256_DIGEST_LENGTH);
 			hmac_text[2*SHA256_DIGEST_LENGTH]='\0';
+			tmp0=strlen(hmac_text)-1;
+			if (hmac_text[tmp0]=='\n') hmac_text[tmp0]='\0';
 			if (!bsearch(hmac_text,hmacs,n_data,2*SHA256_DIGEST_LENGTH,compar)) puts(hmac_text); }
 	if (hmacs) free(hmacs);
 	free (key);
