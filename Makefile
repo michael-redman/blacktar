@@ -8,9 +8,9 @@ LDADD=-lhexbytes -lpq
 QUERY_TYPE?=JOIN
 
 PROGS=restore list_cruft
-BIN_SCRIPTS=backup put_spool s3_list_keys s3_put
+BIN_SCRIPTS=backup delta put_spool s3_list_keys s3_put
 LIBEXECS=hmacs hashes noise paths
-SHARE_SCRIPTS=get_passphrase retrieve
+SHARE_SCRIPTS=get_passphrase retrieve schema.psql
 MAN1=blacktar_backup.1 blacktar_restore.1 blacktar_list_cruft.1
 
 all: $(LIBEXECS) $(PROGS)

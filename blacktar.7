@@ -48,7 +48,7 @@ The "-l limit_bytes" option tells blacktar_backup to exit after the first file e
 
 .SH LIMITATIONS
 
-Because Blacktar needs your Verity database to do restores, you must keep a backup of the database dump outside of Blacktar.
+Because Blacktar needs your Verity database to do restores, you must keep a backup of the database dump outside of Blacktar.  If it is inefficient to back up your whole database every time (e.g. data set includes many small files), the optional "blacktar_delta" script will make and dump 2 special tables (paths_delta and inodes_delta) containing only path and inode rows newer than a time you specify.  However if you have to restore your database from the "full" and "delta" dumps, then before running blacktar_restore to restore your files, you must also copy the "delta" rows back into the main paths and inodes tables with "insert into ... select ...".  In other words no code is written yet to do for the restore process what "blacktar_delta" does for the backup process.
 
 When indexing your files with Verity, you must use full pathnames (with the leading "/") or Blacktar will not be able to link to your files from the tempdir while backing them up.
 
