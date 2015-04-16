@@ -1,0 +1,32 @@
+#!/bin/bash
+
+#Copright 2015 Michael Redman
+#All rights reserved.
+
+#s3_put bucket/key filename=/path/to/file [md5=base64_encoded_md5] [other_libs3_args...]
+
+key="$1"
+shift
+s3_args=()
+while (( "$#" )); do
+	param="`echo \"$1\" | cut -d = -f 1`"
+	if	[ "$param" = md5 ]; then
+		md5="`echo \"$1\" | cut -d = -f 2-`"; shift; continue; fi
+	if	[ "$param" = filename ]; then
+		filename="`echo \"$1\" | cut -d = -f 2-`"; shift; continue; fi
+	s3_args+=("$1")
+	shift; done
+if	[ -z "$md5" ]; then
+	md5=`openssl dgst -md5 -binary "$filename" | openssl enc -base64`; fi
+modulus=1
+while true; do
+	err=$(s3 put "$key" filename="$filename" md5="$md5" "${s3_args[@]}" 2>&1 | grep -vE '^[0-9]+ bytes remaining \([0-9]{1,3}% complete\) \.\.\.'; exit ${PIPESTATUS[0]})
+	r=$?
+	if [ $r -ne 0 ]; then echo "s3 returned $r" >&2; fi
+	if [ "$err" ]; then echo "$err" >&2; r=1; fi
+	if [ $r -eq 0 ]; then break; fi
+	while [ $(($RANDOM%$modulus)) -ne 0 ]; do sleep 60; done
+	modulus=$((1+$modulus))
+	done
+
+#IN GOD WE TRVST.

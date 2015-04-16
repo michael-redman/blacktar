@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#bucket hmac path
+#bucket hmac path hash
 
 dir=`cd $(dirname $0) && pwd`
 passphrase_xxd="`xxd /dev/stdin`"
@@ -33,18 +33,18 @@ while [ true ]; do
 		echo "blacktar s3_verify $2: gpg/tar pipeline printed errors, retrying" >&2
 		continue; fi
 	if
-		[ ! -f "$tmp/$$/$$/$2" ]
+		[ ! -f "$tmp/$$/$$/$4" ]
 		then
 			echo "blacktar s3_verify: failed to extract $2, retrying" >&2
 			continue; fi
-	mv "$tmp/$$/$$/$2" "$3"
-	test_hmac=`"$dir/../../lib/blacktar/hmac_of_file" <(echo -n "$passphrase_xxd" | xxd -r) "$3"`
+	mv "$tmp/$$/$$/$4" "$3"
+	test_hmac=`sha256sum "$3" | cut -d ' ' -f 1`
 	if
-		[ ! "$test_hmac" -o \( "$2" != "$test_hmac" \) ]
+		[ ! "$test_hmac" -o \( "$4" != "$test_hmac" \) ]
 		then
 			rm -rf "$tmp/$$/$$"
 			rm "$3"
-			echo "blacktar s3_verify: checksum mismatch: $2, retrying" 1>&2
+			echo "blacktar s3_verify: checksum mismatch: $4, retrying" 1>&2
 			continue
 		else break; fi
 	done

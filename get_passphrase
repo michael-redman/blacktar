@@ -1,0 +1,15 @@
+function get_passphrase () {
+	local passphrase=abc
+	local passphrase_confirm=def
+	while
+		[ -z "$passphrase" -o -z "$passphrase_confirm" -o "$passphrase" != "$passphrase_confirm" ]
+		do
+			echo -n 'enter passphrase: ' > /dev/tty
+			read -s passphrase < /dev/tty
+			echo > /dev/tty
+			echo -n 'again to confirm: ' > /dev/tty
+			read -s passphrase_confirm < /dev/tty
+			echo > /dev/tty; done
+	echo -n "$passphrase"; }
+
+#IN GOD WE TRVST.
