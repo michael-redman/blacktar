@@ -18,6 +18,7 @@ while [ true ]; do
   Message: The specified key does not exist.' \"$tmp/$$/err\"`" ]; then
 			cat "$tmp/$$/err" >&2
 			echo "($3)" >&2
+			rm -rf "$tmp/$$"
 			exit 3; fi
 		if [ `stat -c%s "$tmp/$$/err"` -ne 0 ]; then r=1; fi
 		if [ $r -eq 0 ]; then break; fi
