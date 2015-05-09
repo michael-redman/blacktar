@@ -1,0 +1,22 @@
+drop table inodes_delta;
+create table inodes_delta(
+	device bigint not null,
+	inode bigint not null,
+	ctime bigint not null,
+	mode integer not null,
+	uid integer not null,
+	gid integer not null,
+	mtime bigint not null,
+	content text);
+alter table inodes_delta add constraint inode_delta_identifier unique (device,inode,ctime);
+create index inodes_delta_content_index on inodes_delta(content);
+drop table paths_delta;
+create table paths_delta(
+	path text not null,
+	xtime bigint not null,
+	device bigint, --null means nothing at path on fs
+	inode bigint, --garbage if device is null
+	ctime bigint --garbage if device is null
+	);
+alter table paths_delta add constraint path_delta_identifier unique (path,xtime);
+create index paths_delta_inode_identifier_index on paths_delta(device,inode,ctime);
