@@ -19,10 +19,10 @@ hmacs: read_whole_file.c hmacs.c
 	cc $(CFLAGS) $(LDFLAGS) -lcrypto -lhexbytes -o $@ $^
 
 restore: restore.c read_whole_file.c
-	cc -D$(QUERY_TYPE) $(CFLAGS) $(ECPG_CFLAGS) $(LDFLAGS) $(LDADD) -o $@ $^
+	cc -D$(QUERY_TYPE) $^ $(CFLAGS) $(ECPG_CFLAGS) $(LDFLAGS) $(LDADD) -lcrypto -o $@
 
 list_cruft: list_cruft.c read_whole_file.c
-	cc -D$(QUERY_TYPE) $(CFLAGS) $(ECPG_CFLAGS) $(LDFLAGS) $(LDADD) -o $@ $^
+	cc -D$(QUERY_TYPE) $(CFLAGS) $(ECPG_CFLAGS) $(LDFLAGS) $(LDADD) -o $@ $^ -lcrypto
 
 install:
 	$(foreach prog, COPYRIGHT LICENSE README, install -D -m 0644 $(prog) $(prefix)/share/doc/blacktar/$(prog);)
