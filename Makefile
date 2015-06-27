@@ -4,7 +4,7 @@ exec_prefix?=$(prefix)
 CFLAGS=-Wall -g -fstack-protector -O2 -I $(prefix)/include
 ECPG_CFLAGS=-I /usr/include/postgresql
 LDFLAGS=-L $(prefix)/lib
-LDADD=-lhexbytes -lpq 
+LDADD=-lpq
 QUERY_TYPE?=JOIN
 
 PROGS=restore list_cruft
@@ -16,7 +16,7 @@ MAN1=blacktar_backup.1 blacktar_restore.1 blacktar_list_cruft.1
 all: $(LIBEXECS) $(PROGS)
 
 hmacs: read_whole_file.c hmacs.c
-	cc $(CFLAGS) $(LDFLAGS) -lcrypto -lhexbytes -o $@ $^
+	cc $(CFLAGS) $(LDFLAGS) -lcrypto -o $@ $^
 
 restore: restore.c read_whole_file.c
 	cc -D$(QUERY_TYPE) $^ $(CFLAGS) $(ECPG_CFLAGS) $(LDFLAGS) $(LDADD) -lcrypto -o $@

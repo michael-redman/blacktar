@@ -7,8 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <hexbytes.h>
-
 extern int read_whole_file(char const * const, unsigned char **, unsigned int *);
 
 #define AT fprintf(stderr,"at "__FILE__":%u\n",__LINE__)
@@ -21,8 +19,8 @@ int compar(const void *a, const void *b){ return memcmp(a,b,2*SHA256_DIGEST_LENG
 int main (int argc, char ** argv) {
 	PGconn *db;
 	PGresult *result;
-	unsigned int key_l, n_alloc=0, n_data=0, tmp0;
-	char *hmacs=NULL, hmac_text[2*SHA256_DIGEST_LENGTH+2], s3_key[S3_KEY_MAX_LEN+2];
+	unsigned int key_l, n_alloc=0, n_data=0, tmp0, i;
+	char *hmacs=NULL, hmac_text[2*SHA256_DIGEST_LENGTH+2], s3_key[S3_KEY_MAX_LEN+2], *p;
 	unsigned char *hmac_binary, *key;
 	if (argc!=3) { fputs(USE,stderr); return 1; }
 	if (read_whole_file(argv[2],&key,&key_l)) { perror(argv[2]); return 1; }
@@ -42,7 +40,9 @@ int main (int argc, char ** argv) {
 			{	n_alloc=1+3*n_alloc;
 				hmacs=realloc(hmacs, 2*SHA256_DIGEST_LENGTH*n_alloc);
 				if (!hmacs) { fputs("realloc failed\n",stderr); goto l1; }}
-		hexbytes_print(hmac_binary,SHA256_DIGEST_LENGTH,&hmacs[2*SHA256_DIGEST_LENGTH*n_data++]);
+		p=&hmacs[2*SHA256_DIGEST_LENGTH*n_data++];
+		for	(i=0;i<SHA256_DIGEST_LENGTH;i++)
+			sprintf(&p[2*i],"%02hhx",hmac_binary[i]);
 		PQclear(result); }
 	PQclear(result);
 	PQexec(db,"close hashes");

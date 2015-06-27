@@ -49,8 +49,6 @@ Third, loop thru the table of directories, making any that do not yet exist and 
 #include <unistd.h>
 #include <utime.h>
 
-#include <hexbytes.h>
-
 #include "err.h"
 
 extern int read_whole_file (char const * const path, unsigned char **buf, unsigned int *data_size);
@@ -113,7 +111,7 @@ PQclear(result1);
 int main
 (int argc, char ** argv)
 {	int r, pipe_fd[2], pid;
-	unsigned int key_len;
+	unsigned int key_len,i;
 	char	path_ar0[PATH_MAX+1], path_ar1[PATH_MAX+1],
 		hmac_text[2*SHA256_DIGEST_LENGTH+1],
 		hash[2*SHA256_DIGEST_LENGTH+1], return_value=0, *buf=NULL;
@@ -296,7 +294,8 @@ int main
 								{	fputs("build restore path failed\n",stderr); AT;
 									goto err2; }
 							hmac_binary=HMAC(EVP_sha256(),key,key_len,(unsigned char const *)hash,2*SHA256_DIGEST_LENGTH,NULL,NULL);
-							hexbytes_print(hmac_binary,SHA256_DIGEST_LENGTH,hmac_text);
+							for	(i=0;i<SHA256_DIGEST_LENGTH;i++)
+								sprintf(&hmac_text[2*i],"%02hhx",hmac_binary[i]);
 							if	(pipe(pipe_fd))
 								{ perror("pipe failed"); AT; goto err2; }
 							if	(!(pid=fork()))
