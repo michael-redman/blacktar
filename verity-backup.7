@@ -1,0 +1,85 @@
+.TH VERITY-BACKUP 7
+.SH NAME
+verity-backup \- content-addressed, encrypted backup
+.SH DESCRIPTION
+.B verity-backup
+backs your files up to Amazon S3.
+
+Verity-backup (1) recognizes duplicate files and keeps only one backup of the file, (2) doesn't re-backup unchanged content that has been moved or renamed, and (3) can do as many "incremantal" backups and garbage-collections as you want without ever having do do another "full" backup.
+
+Verity-backup achieves these efficiencies by naming and looking up your files in the backup store by a content signature instead of by the path names on your system. Verity-backup uses the Verity content tracking system to map between signatures on S3 and paths on your file system.
+
+Verity-backup also caches a list of which hashes are on S3 so it doesn't have to list out your S3 bucket each backup run.
+
+IMPORTANT: See the first note under "Limitations" regarding your responsibility for ensuring your Verity Postgres database gets backed up when you run the verity_backup script.
+
+The main commands are
+.B verity_backup, verity_restore,
+and
+.B verity_s3_list_cruft.
+.SH EXAMPLE COMMANDS
+Set the environment variables for the "s3" command:
+
+you@yourhost:~$ export S3_ACCESS_KEY_ID=your_access_key
+
+you@yourhost:~$ export S3_SECRET_ACCESS_KEY=your_secret_key
+
+If the "s3" command gives you an error about not being able to find a shared library, you may need to run ldconfig on libs3's lib directory (probably /usr/local/lib?)
+
+Back up all content in your Verity database that is not already backed up:
+
+you@yourhost:~$ verity_list -c dbname=my_verity_db | verity_backup passphrase_file your_s3_bucket
+
+If a system's cache of which files are already backed up to S3 becomes invalid (for example because you ran verity_backup on another computer, so this one doesn't know about the files backed up in that run), rebuild it with verity_s3_list_keys bucket_name | sort -u > /var/local/cache/verity-backup/bucket_name".
+
+Restore the tree /some/tree into /tmp/restore:
+
+you@yourhost:~$ verity_list dbname=my_verity_db | grep -z '^/some/tree/' | verity_restore -r /tmp/restore/ dbname=my_verity_db passphrase_file your_s3_bucket
+
+You may also specify a Unix timestamp as the -t option to verity_restore, which will restore the paths to the state as of the most recent Verity indexing less than or equal to the time you specifiey.  e.g., -t `date -d '20140214' +%s`
+
+The backup and restore commands pass the database connection string to libpq unmodified.  See the libpq documentation for the full syntax.
+
+List keys in S3 bucket that do not match any content in your Verity database:
+
+you@yourhost:~$ verity_s3_list_keys your_s3_bucket | verity_s3_list_cruft dbname=my_verity_db passphrase_file
+
+If you run verity_backup with the "-s spooldir" option, then instead of uploading your backup archives, the backup script will copy them to the directory you specify, in case you want to move them to S3 another way (e.g. by first using rsync to get the archives to a host with a better Internet connection, since unlike rsync libs3 cannot resume a "put" where it left off after a broken network connection). If you use this option it is your responsibility to update the cache in /var/local/verity-backup/bucket_name. The script verity_s3_put_spool will put the archives in a spool dir to S3.
+
+The "-l limit_bytes" option tells verity_backup to exit after the first file exceeding limit_bytes of backup files created, which addresses the case where the spool devices are smaller than the data set to be backed up, and the backup has to be done in "parts".
+
+.SH LIMITATIONS
+
+IMPORTANT: You must provide a way for your Verity Postgres database to be backed up (for example by the same script or cron job that runs verity_backup for you). The verity_backup script only backs up the files you tell it, not your database - but verity_restore needs the database to restore any files.
+
+If it is inefficient to back up your whole database every time (e.g. data set includes many small files), the optional "verity_db_delta" script will make and dump 2 special tables (paths_delta and inodes_delta) containing only path and inode rows newer than a time you specify.  However if you have to restore your database from the "full" and "delta" dumps, then before running verity_restore to restore your files, you must also copy the "delta" rows back into the main paths and inodes tables with "insert into ... select ...".  In other words no code is written yet to do for the restore process what "verity_db_delta" does for the backup process.
+
+When indexing your files with Verity, you must use full pathnames (with the leading "/") or verity_backup will not be able to link to your files from the tempdir while backing them up.
+
+See the note in the Verity manual page on the importance of a correct system clock.
+
+Verity_backup will refuse to back up files that have changed since you last indexed them with verity_update.  If it takes a long time for the index and backup to run on your data set, this could cause volatile files not to be backed up for an indefinite number of index-backup cycles.
+
+Filenames, their SHA-256 hashes, and the HMAC signatures of those hashes, are visible to other users in the output of "ps".
+
+Verity-backup will not work with pathnames that are close to the system maximum length, because it concatenates the target root you specify for restoring with the original path you backed up.
+
+Like Verity, Verity-backup ignores FIFOs, sockets, and device special files.
+
+Verity-backup uses the same passphrase for both GPG encryption and for calculating the HMACs of the file hashes in your Verity database.
+
+By default Verity-backup does not do anything to obscure the sizes of your files, although there is a naieve routine in the backup script you can uncomment, which will add a file of noise to each data file's tar archive before encrypting.
+
+It is your responsibility to manage the permissions of /var/local/cache/verity-backup.
+
+Nothing has yet been done to ensure secure permissions for Verity-backup's temporary files.  
+
+.SH BUGS
+
+There is a bug affecting verity_backup and the above usage example on user accounts where gpg has never been run before.  verity_backup does not recognize messages like "gpg: directory `/home/ec2-user/.gnupg' created" as benign, and will abort backing up the current file.  verity_backup will backup any aborted files on the next run(s) when gpg is done printing its setup messages, or you can work around the bug entirely by manually encrypting a file with gpg before ever running verity_backup.
+
+.SH AUTHOR
+
+Michael Redman <michael.redman.4@gmail.com>
+
+.SH IN GOD WE TRVST.

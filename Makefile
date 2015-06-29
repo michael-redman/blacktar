@@ -2,16 +2,16 @@ prefix?=/usr/local
 exec_prefix?=$(prefix)
 
 CFLAGS=-Wall -g -fstack-protector -O2 -I $(prefix)/include
-ECPG_CFLAGS=-I /usr/include/postgresql
+PQ_CFLAGS=-I /usr/include/postgresql
 LDFLAGS=-L $(prefix)/lib
 LDADD=-lpq
 QUERY_TYPE?=JOIN
 
-PROGS=restore list_cruft
-BIN_SCRIPTS=backup delta put_spool s3_list_keys s3_put
+PROGS=restore s3_list_cruft
+BIN_SCRIPTS=backup db_delta s3_put_spool s3_list_keys s3_put
 LIBEXECS=hmacs hashes noise paths
 SHARE_SCRIPTS=get_passphrase retrieve schema.psql
-MAN1=blacktar_backup.1 blacktar_restore.1 blacktar_list_cruft.1
+MAN1=verity_backup.1 verity_restore.1 verity_s3_list_cruft.1
 
 all: $(LIBEXECS) $(PROGS)
 
@@ -19,31 +19,30 @@ hmacs: read_whole_file.c hmacs.c
 	cc $(CFLAGS) $(LDFLAGS) -lcrypto -o $@ $^
 
 restore: restore.c read_whole_file.c
-	cc -D$(QUERY_TYPE) $^ $(CFLAGS) $(ECPG_CFLAGS) $(LDFLAGS) $(LDADD) -lcrypto -o $@
+	cc -D$(QUERY_TYPE) $^ $(CFLAGS) $(PQ_CFLAGS) $(LDFLAGS) $(LDADD) -lcrypto -o $@
 
-list_cruft: list_cruft.c read_whole_file.c
-	cc -D$(QUERY_TYPE) $(CFLAGS) $(ECPG_CFLAGS) $(LDFLAGS) $(LDADD) -o $@ $^ -lcrypto
+s3_list_cruft: s3_list_cruft.c read_whole_file.c
+	cc -D$(QUERY_TYPE) $(CFLAGS) $(PQ_CFLAGS) $(LDFLAGS) $(LDADD) -o $@ $^ -lcrypto
 
 install:
-	$(foreach prog, COPYRIGHT LICENSE README, install -D -m 0644 $(prog) $(prefix)/share/doc/blacktar/$(prog);)
+	$(foreach prog, COPYRIGHT LICENSE README, install -D -m 0644 $(prog) $(prefix)/share/doc/verity-backup/$(prog);)
 	$(foreach prog, $(MAN1), install -D -m 0644 $(prog) $(prefix)/share/man/man1/$(prog);)
-	install -D -m 0644 blacktar.7 $(prefix)/share/man/man7/blacktar.7
-	$(foreach prog, $(LIBEXECS), install -D -m 0755 $(prog) $(exec_prefix)/lib/blacktar/$(prog);)
-	$(foreach prog, $(SHARE_SCRIPTS), install -D -m 0755 $(prog) $(prefix)/share/blacktar/$(prog);)
-	$(foreach prog, $(BIN_SCRIPTS) $(PROGS), install -D -m 0755 $(prog) $(exec_prefix)/bin/blacktar_$(prog);)
-	mkdir -p /var/local/cache/blacktar
-	chmod +t /var/local/cache/blacktar
-	chmod go+rwx /var/local/cache/blacktar
+	install -D -m 0644 verity-backup.7 $(prefix)/share/man/man7/verity-backup.7
+	$(foreach prog, $(LIBEXECS), install -D -m 0755 $(prog) $(exec_prefix)/lib/verity-backup/$(prog);)
+	$(foreach prog, $(SHARE_SCRIPTS), install -D -m 0755 $(prog) $(prefix)/share/verity-backup/$(prog);)
+	$(foreach prog, $(BIN_SCRIPTS) $(PROGS), install -D -m 0755 $(prog) $(exec_prefix)/bin/verity_$(prog);)
+	mkdir -p /var/local/cache/verity-backup
+	chmod +t /var/local/cache/verity-backup
+	chmod go+rwx /var/local/cache/verity-backup
 
 uninstall:
-	rm -rf $(exec_prefix)/lib/blacktar
-	$(foreach prog, $(PROGS) $(BIN_SCRIPTS), rm -f $(exec_prefix)/bin/blacktar_$(prog);)
+	rm -rf $(exec_prefix)/lib/verity-backup
+	$(foreach prog, $(PROGS) $(BIN_SCRIPTS), rm -f $(exec_prefix)/bin/verity_$(prog);)
 	$(foreach prog, $(MAN1), rm -f $(prefix)/share/man/man1/$(prog);)
-	rm $(prefix)/share/man/man7/blacktar.7
-	rm -f $(exec_prefix)/bin/blacktar
-	rm -rf $(prefix)/share/doc/blacktar
-	rm -rf $(prefix)/share/blacktar
-	rm -rf /var/local/cache/blacktar
+	rm $(prefix)/share/man/man7/verity-backup.7
+	rm -rf $(prefix)/share/doc/verity-backup
+	rm -rf $(prefix)/share/verity-backup
+	rm -rf /var/local/cache/verity-backup
 
 clean:
 	rm -f $(LIBEXECS) $(PROGS)

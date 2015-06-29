@@ -31,12 +31,12 @@ while [ true ]; do
 	err=`grep -v -e 'gpg: CAST5 encrypted data' -e 'gpg: encrypted with 1 passphrase' "$tmp/$$/err"`
 	if [ "$err" ]; then
 		echo "$err" >&2
-		echo "blacktar s3_verify $2: gpg/tar pipeline printed errors, retrying" >&2
+		echo "s3_verify $2: gpg/tar pipeline printed errors, retrying" >&2
 		continue; fi
 	if
 		[ ! -f "$tmp/$$/$$/$4" ]
 		then
-			echo "blacktar s3_verify: failed to extract $2, retrying" >&2
+			echo "s3_verify: failed to extract $2, retrying" >&2
 			continue; fi
 	mv "$tmp/$$/$$/$4" "$3"
 	test_hmac=`sha256sum "$3" | cut -d ' ' -f 1`
@@ -45,7 +45,7 @@ while [ true ]; do
 		then
 			rm -rf "$tmp/$$/$$"
 			rm "$3"
-			echo "blacktar s3_verify: checksum mismatch: $4, retrying" 1>&2
+			echo "s3_verify: checksum mismatch: $4, retrying" 1>&2
 			continue
 		else break; fi
 	done

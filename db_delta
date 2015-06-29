@@ -1,6 +1,6 @@
 #!/bin/bash
 
-psql $1 < /usr/local/share/blacktar/schema.psql >&2
+psql $1 < /usr/local/share/verity-backup/schema.psql >&2
 psql -c "insert into paths_delta select * from paths where xtime>=$2" $1 >&2
 psql -c "insert into inodes_delta select * from inodes where exists
 	(select * from paths where paths.device=inodes.device and paths.inode=inodes.inode and paths.ctime=inodes.ctime and xtime>=$2) 

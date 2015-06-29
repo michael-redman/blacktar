@@ -1,13 +1,13 @@
 #!/bin/bash
 
-USE='find /spoo/dir -type f -print0 | put_spool bucket_name'
+USE='find /spool/dir -type f -print0 | verity_s3_put_spool bucket_name'
 
 while read -r -d '' line; do
 	dir="`dirname \"$line\"`"
 	file="`basename \"$line\"`"
 	hmac="`echo \"$file\" | cut -d . -f 1`"
 	md5="`echo \"$file\" | cut -d . -f 2`"
-	blacktar_s3_put "$1/$hmac" filename="$line" md5=`echo "$md5" | xxd -r -p | openssl enc -base64`
+	verity_s3_put "$1/$hmac" filename="$line" md5=`echo "$md5" | xxd -r -p | openssl enc -base64`
 	echo "$hmac"; done
 
 #IN GOD WE TRVST.

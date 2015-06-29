@@ -1,4 +1,4 @@
-#define USE "verity_list ... | grep -z ... | blacktar_restore [ -r /restore/root ] [-t as-of-time_t] 'db connection string' /path/to/passphrase/file s3_bucket_name\n"
+#define USE "verity_list ... | grep -z ... | verity_restore [ -r /restore/root ] [-t as-of-time_t] 'db connection string' /path/to/passphrase/file s3_bucket_name\n"
 
 /* Logic:
 
@@ -304,7 +304,7 @@ int main
 											||close(pipe_fd[1]))
 									{	perror("i/o redirection failed"); AT;
 										exit(EXIT_FAILURE); }
-									execl("/usr/local/share/blacktar/retrieve","/usr/local/share/blacktar/retrieve",argv[optind+2],hmac_text,path_ar0,hash,NULL);
+									execl("/usr/local/share/verity-backup/retrieve","/usr/local/share/verity-backup/retrieve",argv[optind+2],hmac_text,path_ar0,hash,NULL);
 									perror("execl failed"); AT; exit(EXIT_FAILURE); }
 							if	(	close(pipe_fd[0])
 									|| pid==-1
