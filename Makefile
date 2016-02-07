@@ -10,7 +10,7 @@ QUERY_TYPE?=JOIN
 PROGS=restore s3_list_cruft
 BIN_SCRIPTS=backup db_delta s3_put_spool s3_list_keys s3_put
 LIBEXECS=hmacs hashes noise paths
-SHARE_SCRIPTS=get_passphrase retrieve schema.psql
+SHARE_SCRIPTS=get_passphrase retrieve schema.psql strip_s3_list
 MAN1=verity_backup.1 verity_restore.1 verity_s3_list_cruft.1
 
 all: $(LIBEXECS) $(PROGS)

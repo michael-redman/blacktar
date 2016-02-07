@@ -14,13 +14,13 @@ extern int read_whole_file(char const * const, unsigned char **, unsigned int *)
 
 #define S3_KEY_MAX_LEN 1024
 
-int compar(const void *a, const void *b){ return memcmp(a,b,2*SHA256_DIGEST_LENGTH); }
+int compar(const void *a, const void *b){ return strcmp(*(char**)a,*(char**)b);}
 
 int main (int argc, char ** argv) {
 	PGconn *db;
 	PGresult *result;
-	unsigned int key_l, n_alloc=0, n_data=0, tmp0, i;
-	char *hmacs=NULL, hmac_text[2*SHA256_DIGEST_LENGTH+2], s3_key[S3_KEY_MAX_LEN+2], *p;
+	unsigned int key_l, n_alloc=0, n_data=0, i;
+	char **hmacs=NULL, s3_key[S3_KEY_MAX_LEN+2], *s3_key_p=s3_key;
 	unsigned char *hmac_binary, *key;
 	if (argc!=3) { fputs(USE,stderr); return 1; }
 	if (read_whole_file(argv[2],&key,&key_l)) { perror(argv[2]); return 1; }
@@ -28,7 +28,7 @@ int main (int argc, char ** argv) {
 	if (PQstatus(db)!=CONNECTION_OK){ SQLERR; AT; goto l0; }
 	result=PQexec(db,"begin");
 	if (PQresultStatus(result)!=PGRES_COMMAND_OK){ SQLERR; AT; goto l1; }
-	result=PQexec(db,"declare hashes cursor for select content from inodes where mode/4096=8");
+	result=PQexec(db,"declare hashes cursor for select distinct content from inodes where mode/4096=8");
 	if (PQresultStatus(result)!=PGRES_COMMAND_OK){ SQLERR; AT; goto l1; }
 	PQclear(result);
 	while(1){
@@ -38,31 +38,40 @@ int main (int argc, char ** argv) {
 		hmac_binary=HMAC(EVP_sha256(),key,key_l,(unsigned char const *)PQgetvalue(result,0,0),2*SHA256_DIGEST_LENGTH,NULL,NULL);
 		if	(n_alloc==n_data)
 			{	n_alloc=1+3*n_alloc;
-				hmacs=realloc(hmacs, 2*SHA256_DIGEST_LENGTH*n_alloc);
+				hmacs=realloc(hmacs,n_alloc*sizeof(char *));
 				if (!hmacs) { fputs("realloc failed\n",stderr); goto l1; }}
-		p=&hmacs[2*SHA256_DIGEST_LENGTH*n_data++];
+		hmacs[n_data]=malloc(2*SHA256_DIGEST_LENGTH+1);
+		if (!hmacs[n_data]) { AT; goto l1; }
 		for	(i=0;i<SHA256_DIGEST_LENGTH;i++)
-			sprintf(&p[2*i],"%02hhx",hmac_binary[i]);
-		PQclear(result); }
+			if	(sprintf(&hmacs[n_data][2*i],"%02hhx",hmac_binary[i])<0)
+				{ AT; goto l1; }
+		PQclear(result);
+		n_data++; }
 	PQclear(result);
 	PQexec(db,"close hashes");
 	if (PQresultStatus(result)!=PGRES_COMMAND_OK){ SQLERR; AT; goto l1; }
 	PQclear(result);
 	PQfinish(db);
-	qsort(hmacs,n_data,2*SHA256_DIGEST_LENGTH,compar);
+	qsort(hmacs,n_data,sizeof(char *),compar);
 	while	(!feof(stdin))
 		{	if (!fgets(s3_key,S3_KEY_MAX_LEN+2,stdin)) break;
-			strncpy(hmac_text,s3_key,2*SHA256_DIGEST_LENGTH);
-			hmac_text[2*SHA256_DIGEST_LENGTH]='\0';
-			tmp0=strlen(hmac_text)-1;
-			if (hmac_text[tmp0]=='\n') hmac_text[tmp0]='\0';
-			if (!bsearch(hmac_text,hmacs,n_data,2*SHA256_DIGEST_LENGTH,compar)) puts(hmac_text); }
+			i=strlen(s3_key)-1;
+			if (s3_key[i]=='\n') s3_key[i]='\0';
+			if	(!bsearch(
+					&s3_key_p,
+					hmacs,
+					n_data,
+					sizeof(char *),
+					compar))
+				puts(s3_key); }
+	if (ferror(stdin)) { perror("stdin"); goto l0_5; }
+	for (i=0;i<n_data;i++) free(hmacs[i]);
 	if (hmacs) free(hmacs);
 	free (key);
-	if (ferror(stdin)) { perror("stdin"); return 1; }
 	return 0;
 	l1:	PQclear(result);
 		PQfinish(db);
+	l0_5:	for (i=0;i<n_data;i++) free(hmacs[i]);
 		if (hmacs) free(hmacs);
 	l0:	free(key);
 		return -1; }

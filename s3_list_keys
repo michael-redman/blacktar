@@ -2,7 +2,7 @@
 
 modulus=1
 while [ true ]; do
-	s3 -u list $1 > /tmp/$$.out 2> /tmp/$$.err
+	s3 list $@ > /tmp/$$.out 2> /tmp/$$.err
 	r=$?
 	if [ `stat -c%s /tmp/$$.err` -ne 0 ]; then r=1; fi
 	if [ $r -eq 0 ]; then break; fi
@@ -11,7 +11,7 @@ while [ true ]; do
 	modulus=$(($modulus+1)); done
 
 rm /tmp/$$.err
-tail -n +3 /tmp/$$.out | cut -d ' ' -f 1
+tail -n +3 /tmp/$$.out | /usr/local/share/verity-backup/strip_s3_list
 rm /tmp/$$.out
 
 #Copyright 2014 Michael Redman

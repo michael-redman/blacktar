@@ -1,23 +1,35 @@
 #!/bin/bash
 
-#bucket hmac path hash
+USE="retrieve [ -u username ] bucket hmac path hash"
 
 dir=`cd $(dirname $0) && pwd`
+argv=("$@")
+while	getopts "u:" opt; do
+	case	"$opt" in
+		u)	su_begin="su -c "
+			su_end="$OPTARG";;
+		\?)	echo "$USE" >&2; exit 1;; esac; done
+if [ $(($#-$OPTIND)) -ne 3 ]; then echo "$USE" >&2; fi
+bucket="${argv[$OPTIND-1]}"
+hmac="${argv[$OPTIND]}"
+path="${argv[$OPTIND+1]}"
+hash="${argv[$OPTIND+2]}"
 passphrase_xxd="`xxd /dev/stdin`"
 if [ ! "$tmp" ]; then tmp=/tmp; fi
 rm -rf "$tmp/$$"
 mkdir -p "$tmp/$$"
 
-mkdir -p `dirname "$3"`
+mkdir -p `dirname "$path"`
 #add big retry loop all the way thru verifying the decrypted file because libs3 sometimes returns 0 even if the file is short.  Assume that if the file is found on S3 then it is correct because it's the backup script's responsibility to ensure that the file was correctly stored
 while [ true ]; do
 	while [ true ]; do
-		s3 -u get "$1/$2" > "$tmp/$$/out" 2> "$tmp/$$/err"
+		s3_cmd=`printf 's3 get %q' "$bucket/$hmac"`
+		$su_begin "$s3_cmd" $su_end > "$tmp/$$/out" 2> "$tmp/$$/err"
 		r=$?
 		if [ "`grep 'ERROR: ErrorNoSuchKey
   Message: The specified key does not exist.' \"$tmp/$$/err\"`" ]; then
 			cat "$tmp/$$/err" >&2
-			echo "($3)" >&2
+			echo "($path)" >&2
 			rm -rf "$tmp/$$"
 			exit 3; fi
 		if [ `stat -c%s "$tmp/$$/err"` -ne 0 ]; then r=1; fi
@@ -31,25 +43,24 @@ while [ true ]; do
 	err=`grep -v -e 'gpg: CAST5 encrypted data' -e 'gpg: encrypted with 1 passphrase' "$tmp/$$/err"`
 	if [ "$err" ]; then
 		echo "$err" >&2
-		echo "s3_verify $2: gpg/tar pipeline printed errors, retrying" >&2
+		echo "s3_verify $hmac: gpg/tar pipeline printed errors, retrying" >&2
 		continue; fi
 	if
-		[ ! -f "$tmp/$$/$$/$4" ]
+		[ ! -f "$tmp/$$/$$/$hash" ]
 		then
-			echo "s3_verify: failed to extract $2, retrying" >&2
+			echo "s3_verify: failed to extract $hmac, retrying" >&2
 			continue; fi
-	mv "$tmp/$$/$$/$4" "$3"
-	test_hmac=`sha256sum "$3" | cut -d ' ' -f 1`
+	mv "$tmp/$$/$$/$hash" "$path"
+	test_hash=`sha256sum "$path" | cut -d ' ' -f 1`
 	if
-		[ ! "$test_hmac" -o \( "$4" != "$test_hmac" \) ]
+		[ ! "$test_hash" -o \( "$hash" != "$test_hash" \) ]
 		then
 			rm -rf "$tmp/$$/$$"
-			rm "$3"
-			echo "s3_verify: checksum mismatch: $4, retrying" 1>&2
+			rm "$path"
+			echo "s3_verify: checksum mismatch: $hash, retrying" 1>&2
 			continue
 		else break; fi
 	done
-	rm -rf "$tmp/$$"
-	exit 0
+rm -rf "$tmp/$$"
 
 #IN GOD WE TRVST.

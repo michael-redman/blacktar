@@ -1,4 +1,4 @@
-#define USE "verity_list ... | grep -z ... | verity_restore [ -r /restore/root ] [-t as-of-time_t] 'db connection string' /path/to/passphrase/file s3_bucket_name\n"
+#define USE "verity_list ... | grep -z ... | verity_restore [ -u username ] [ -r /restore/root ] [-t as-of-time_t] 'db connection string' /path/to/passphrase/file s3_bucket_name\n"
 
 /* Logic:
 
@@ -110,11 +110,13 @@ PQclear(result1);
 		
 int main
 (int argc, char ** argv)
-{	int r, pipe_fd[2], pid;
+{	int r, sort_pipe_fd[2], retrieve_pipe_fd[2];
+	pid_t sort_pid, retrieve_pid,wait_result;
 	unsigned int key_len,i;
 	char	path_ar0[PATH_MAX+1], path_ar1[PATH_MAX+1],
 		hmac_text[2*SHA256_DIGEST_LENGTH+1],
-		hash[2*SHA256_DIGEST_LENGTH+1], return_value=0, *buf=NULL;
+		hash[2*SHA256_DIGEST_LENGTH+1], return_value=0, *buf=NULL,
+		*username=NULL;
 	size_t buf_len=0;
 	unsigned char * key, *hmac_binary;
 	PGresult * result0, * result1;
@@ -122,7 +124,7 @@ int main
 	mode_t mode;
 	uid_t uid; gid_t gid;
 	uint64_t mtime, t=htobe64(time(NULL));
-	while	((r=getopt(argc,argv,"r:t:"))!=-1){ switch(r){
+	while	((r=getopt(argc,argv,"r:t:u:"))!=-1){ switch(r){
 		case 'r':
 			restore_root=optarg;
 			restore_root_len=strlen(restore_root);
@@ -130,15 +132,19 @@ int main
 				restore_root[--restore_root_len]='\0';
 			break;
 		case 't': t=htobe64(strtoll(optarg,NULL,10)); break;
+		case 'u': username=optarg; break;
 		default: fputs(USE,stderr); exit(EXIT_FAILURE); }}
 	if (argc-optind!=3) { fputs(USE,stderr); exit(EXIT_FAILURE); }
+	if	(!geteuid()&&!username)
+		{	fputs("If you are running this program as root, you must specify a user id to run the file fetches as.\n",stderr);
+			return 1; }
 	if	(read_whole_file(argv[optind+1],&key,&key_len))
 		{ perror(argv[optind+1]); AT; exit(EXIT_FAILURE); }	
 	PGconn * db=PQconnectdb(argv[optind]);
 	if(PQstatus(db)!=CONNECTION_OK){
 		fputs(PQerrorMessage(db),stderr);
-		free(key);
-		exit(EXIT_FAILURE); }
+		goto l0; }
+	//manual page says these tmp files go away when program exits
 	if	(	!(hashes_tmpfile = tmpfile())
 			|| !(dirs_tmpfile = tmpfile()))
 		{	fputs("error creating tmpfiles\n",stderr); goto err0; }
@@ -166,8 +172,7 @@ int main
 			SQLCHECK(db,result0,PGRES_TUPLES_OK,err1);
 			if	(!PQntuples(result0))
 				{	fprintf(stderr, "error in stdin read loop: no current record found for path %s\n",buf);
-					PQclear(result0);
-					continue; }
+					goto err1; }
 			if	(	PQgetisnull(result0,0,0)
 					|| PQgetisnull(result0,0,1)
 					|| PQgetisnull(result0,0,2)
@@ -212,8 +217,8 @@ int main
 							goto err1; }
 					strcpy(path_ar0,path_ar1);
 					//dirname modifies arg
-					mkdir_recursive(dirname(path_ar1));
-					if	(symlink(PQgetvalue(result0,0,4),path_ar0))
+					if	(	mkdir_recursive(dirname(path_ar1))
+							|| symlink(PQgetvalue(result0,0,4),path_ar0))
 						{	fputs("could not create symlink\n",stderr);
 							perror(path_ar0); AT;
 							goto err1; }
@@ -227,22 +232,19 @@ int main
 	//Part 2
 	if	(fseek(hashes_tmpfile,0,SEEK_SET))
 		{ perror("seek on hashes tmpfile failed\n"); AT; goto err0;}
-	if	(pipe(pipe_fd))
+	if	(pipe(sort_pipe_fd))
 		{ perror("pipe failed"); AT; goto err0; }
-	if	(!(pid=fork()))
+	if	(!(sort_pid=fork()))
 		{	if	(	dup2(fileno(hashes_tmpfile),STDIN_FILENO)==-1
-					||dup2(pipe_fd[1],STDOUT_FILENO)==-1
-					||close(pipe_fd[0]))
+					||dup2(sort_pipe_fd[1],STDOUT_FILENO)==-1
+					||close(sort_pipe_fd[0]))
 				{	perror("i/o redirection failed"); AT;
 					exit(EXIT_FAILURE); }
 			execl("/usr/bin/sort","/usr/bin/sort","-u",NULL);
 			perror("execl failed"); AT; exit(EXIT_FAILURE); }
-	if	(pid==-1)
+	if	(sort_pid==-1)
 		{ perror("fork failed"); AT; goto err0; }
-	while	(wait(&r)!=-1)
-		if	(!WIFEXITED(r) || WEXITSTATUS(r))
-			{ perror("sort child error"); AT; goto err0; }
-	if	(close(pipe_fd[1]) || !(child_stdout=fdopen(pipe_fd[0],"rb")))
+	if	(close(sort_pipe_fd[1]) || !(child_stdout=fdopen(sort_pipe_fd[0],"rb")))
 		{ perror("sort child error"); AT; goto err0; }
 
 	while	(!feof(child_stdout))
@@ -296,28 +298,35 @@ int main
 							hmac_binary=HMAC(EVP_sha256(),key,key_len,(unsigned char const *)hash,2*SHA256_DIGEST_LENGTH,NULL,NULL);
 							for	(i=0;i<SHA256_DIGEST_LENGTH;i++)
 								sprintf(&hmac_text[2*i],"%02hhx",hmac_binary[i]);
-							if	(pipe(pipe_fd))
+							if	(pipe(retrieve_pipe_fd))
 								{ perror("pipe failed"); AT; goto err2; }
-							if	(!(pid=fork()))
-								{	if	(	dup2(pipe_fd[0],STDIN_FILENO)==-1
-											||close(pipe_fd[0])
-											||close(pipe_fd[1]))
+							if	(!(retrieve_pid=fork()))
+								{	if	(	dup2(retrieve_pipe_fd[0],STDIN_FILENO)==-1
+											||close(retrieve_pipe_fd[0])
+											||close(retrieve_pipe_fd[1]))
 									{	perror("i/o redirection failed"); AT;
 										exit(EXIT_FAILURE); }
-									execl("/usr/local/share/verity-backup/retrieve","/usr/local/share/verity-backup/retrieve",argv[optind+2],hmac_text,path_ar0,hash,NULL);
+									if	(username)
+										execl("/usr/local/share/verity-backup/retrieve","/usr/local/share/verity-backup/retrieve","-u",username,argv[optind+2],hmac_text,path_ar0,hash,NULL);
+										else execl("/usr/local/share/verity-backup/retrieve","/usr/local/share/verity-backup/retrieve",argv[optind+2],hmac_text,path_ar0,hash,NULL);
 									perror("execl failed"); AT; exit(EXIT_FAILURE); }
-							if	(	close(pipe_fd[0])
-									|| pid==-1
-									|| write(pipe_fd[1],key,key_len)!=key_len
-									|| close(pipe_fd[1]))
-								{	perror("failed invoking retrieve command"); AT; while(wait(&r)==-1); goto err2; }
-							while	(wait(&r)!=-1)
-								{	if	(WIFEXITED(r)&&WEXITSTATUS(r)==3)
-										{	fprintf(stderr,"ERROR: FILE NOT FOUND FOR HASH: %s (%s), continuing\n",hash,PQgetvalue(result1,0,0)); AT;
-											return_value=3;
-											CLOSE_LINKS_CURSOR
-											goto hash_done_cleanup; }
-									if (!WIFEXITED(r)||WEXITSTATUS(r)) { fprintf(stderr,"retrieve child returned %d\n",WEXITSTATUS(r)); AT; goto err2; } }
+							if	(!retrieve_pid)
+								{	fputs("could not fork!\n",stderr); AT;
+									goto err2; }
+							if	(	close(retrieve_pipe_fd[0])
+									|| retrieve_pid==-1
+									|| write(retrieve_pipe_fd[1],key,key_len)!=key_len
+									|| close(retrieve_pipe_fd[1]))
+								{	perror("failed invoking retrieve command"); AT; while(waitpid(retrieve_pid,&r,0)==-1); goto err2; }
+							while ((wait_result=waitpid(retrieve_pid,&r,0))==-1&&errno==EINTR);
+							if	(wait_result<0 || !WIFEXITED(r) || WEXITSTATUS(r))
+								{	fputs("problem with child\n",stderr); AT;
+									goto err2; }
+							if	(WIFEXITED(r)&&WEXITSTATUS(r)==3)
+								{	fprintf(stderr,"ERROR: FILE NOT FOUND FOR HASH: %s (%s), continuing\n",hash,PQgetvalue(result1,0,0)); AT;
+									return_value=3;
+									CLOSE_LINKS_CURSOR
+									goto hash_done_cleanup; }
 							if	(set_perms(
 									path_ar0,
 									strtol(PQgetvalue(result0,0,3),NULL,10),
@@ -340,6 +349,9 @@ int main
 				PQclear(result0); }
 	if	(fclose(child_stdout)||fclose(hashes_tmpfile))
 		{ perror("error closing files: "); perror(NULL); AT; goto err0; }
+	while ((wait_result=waitpid(sort_pid,&r,0))==-1&&errno==EINTR)
+	if	(wait_result<0 || !WIFEXITED(r) || WEXITSTATUS(r))
+		{ perror("sort child error"); AT; goto err0; }
 	PQfinish(db);
 	free(key);
 
@@ -376,8 +388,8 @@ int main
 	err2:	PQclear(result1);
 	err1:	PQclear(result0);
 	err0:	PQfinish(db);
-		free(key);
-		free(buf);
-		exit(EXIT_FAILURE); }
+	l0:	free(key);
+		if (buf) free(buf);
+		return 1; }
 	
 /*IN GOD WE TRVST.*/
