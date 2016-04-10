@@ -24,7 +24,9 @@ mkdir -p `dirname "$path"`
 while [ true ]; do
 	while [ true ]; do
 		s3_cmd=`printf 's3 get %q' "$bucket/$hmac"`
-		$su_begin "$s3_cmd" $su_end > "$tmp/$$/out" 2> "$tmp/$$/err"
+		if	[ "$su_begin" ]
+			then $su_begin "$s3_cmd" $su_end > "$tmp/$$/out" 2> "$tmp/$$/err"
+			else $s3_cmd > "$tmp/$$/out" 2> "$tmp/$$/err"; fi
 		r=$?
 		if [ "`grep 'ERROR: ErrorNoSuchKey
   Message: The specified key does not exist.' \"$tmp/$$/err\"`" ]; then
