@@ -2,33 +2,23 @@
 
 /* Logic:
 
-
-First read from stdin in a loop all the paths to restore.
-
-For each path, query the database for its mode to tell what it is.
-
-If it's a regular file, put its hash in a list and its path in a temprary table.  The list of hashes is so we only fetch each object from the backup store once, and the temporary table is for querying which of the paths pointing to an inode are in the set of paths to restore.
-
-If it's a directory, put it in a list of directories.  We set directory permissions and create empties last because we might need to restore a file into a dir that needs to not be writeable
-
-If it's a symlink, restore it (including any parent directories).
-
-
+First read from stdin in a loop all the paths to restore. For each path, query the database for its mode to tell what it is.
+	If it's a regular file, put its hash in a list and its path in a temprary table.  The list of hashes is so we only fetch each object from the backup store once, and the temporary table is for querying which of the paths pointing to an inode are in the set of paths to restore.
+	If it's a symlink, put its inode information into a temporary table. Later we will "select distinct" on the table and then restore each inode and all paths hardlinking to it.
+	If it's a directory, put it in a list of directories.  We set directory permissions and create empties last because we might need to restore a file into a dir that needs to not be writeable
 Second, restore the content.
-
-Sort & unique the list of hmacs
-
-For each hmac, query all the inodes that currently have that content.
-
-For each inode, query all the paths pointing to it that are in the set to restore.
-
-For the first path in the loop, get the content from the backup store and restore it to that path.
-
-For for each remaining path, hardlink to the source.  If hardlinking fails (e.g. paths that were on the same device during backup are not during restore) print an error and exit so the user can figure out what to do (e.g. restore the paths in subsets) - not clear whether the better behavior would be to restore a copy or a symlink.
-
-
-Third, loop thru the table of directories, making any that do not yet exist and setting permissions on all. */
-
+	For regular files:
+		Sort & unique the list of hmacs
+		For each hmac, query all the inodes that currently have that content.
+			For each inode, query all the paths pointing to it that are in the set to restore.
+				For the first path in the loop, get the content from the backup store and restore it to that path.
+				For for each remaining path, hardlink to the source.  If hardlinking fails (e.g. paths that were on the same device during backup are not during restore) print an error and exit so the user can figure out what to do (e.g. restore the paths in subsets) - not clear whether the better behavior would be to restore a copy or a symlink.
+	For symlinks:
+		for each inode in "select distinct" the table of inodes to restore made in step 1
+			query all paths in the set of paths to restore, that point to that inode
+			make the symlink with the first path
+			hardlink all remaining paths to there.
+	For dirs, make any that do not yet exist and set permissions on all. */
 
 #define _GNU_SOURCE
 
@@ -102,6 +92,61 @@ int set_perms
 		{fputs("error setting mtime: ",stderr); perror(path); AT; r=1;}
 	return r; }
 
+char restore_symlink(void * target, char const * const path)
+{ return symlink(target,path); }
+
+char restore_inode(
+	PGconn *db,
+	uint64_t t,
+	char const * const device,
+	char const * const inode,
+	char const * const ctime,
+	char (*callback)(void *, char const * const),
+	void * context)
+{	char target[PATH_MAX+1]="", path[PATH_MAX+1], tmp[PATH_MAX+1];
+	PGresult *result=PQexecParams(db,
+		"declare links_cursor cursor for select path from paths where "\
+		"device=$1 and inode=$2 and ctime=$3 "\
+		"and xtime=(select max(xtime) from paths as alias where alias.path=paths.path and xtime<=$4) "\
+		"and exists (select * from paths_to_restore where paths_to_restore.path=paths.path)",
+		4,NULL,
+		(char const * const []){
+			device,
+			inode,
+			ctime,
+			(char const * const)&t},
+		(int const []){ 0, 0, 0, sizeof(uint64_t)},
+		(int const []){0,0,0,1},0);
+	if	(PQresultStatus(result)!=PGRES_COMMAND_OK)
+		{ PQerrorMessage(db); AT; return 1; }
+	PQclear(result);
+	while(1){
+		result=PQexec(db,"fetch links_cursor");
+		if	(PQresultStatus(result)!=PGRES_TUPLES_OK)
+			{ fputs(PQerrorMessage(db),stderr); AT; return 1; }
+		if(!PQntuples(result)) break;
+		if	(build_restore_path(PQgetvalue(result,0,0),path))
+			{ AT; return 1; }
+		strncpy(tmp,path,PATH_MAX+1);
+		tmp[PATH_MAX]=0;
+		if	(mkdir_recursive(dirname(tmp)))
+			{ AT; return 1; }
+		if	(!target[0])
+			{	if	(callback(context,path))
+					{ AT; return 1; }
+				strncpy(target,path,PATH_MAX+1);
+				target[PATH_MAX]=0; }
+			else{	if	(link(target,path))
+					{ perror(PQgetvalue(result,0,0)); AT; return 1; } }
+		PQclear(result); }
+	PQclear(result);
+	result=PQexec(db,"close links_cursor");
+	if	(PQresultStatus(result)!=PGRES_COMMAND_OK)
+		{ PQerrorMessage(db); AT; return 1; }
+	PQclear(result);
+	return 0; }
+
+
 #define CLOSE_LINKS_CURSOR \
 PQclear(result1); \
 result1=PQexec(db,"close links_cursor"); \
@@ -116,7 +161,7 @@ int main
 	char	path_ar0[PATH_MAX+1], path_ar1[PATH_MAX+1],
 		hmac_text[2*SHA256_DIGEST_LENGTH+1],
 		hash[2*SHA256_DIGEST_LENGTH+1], return_value=0, *buf=NULL,
-		*username=NULL;
+		*username=NULL, tmp[PATH_MAX+1];
 	size_t buf_len=0;
 	unsigned char * key, *hmac_binary;
 	PGresult * result0, * result1;
@@ -154,12 +199,20 @@ int main
 	result0=PQexec(db,"create temporary table paths_to_restore(path text not null unique)");
 	SQLCHECK(db,result0,PGRES_COMMAND_OK,err1);
 	PQclear(result0);
+	result0=PQexec(db,"create temporary table symlink_inodes("
+		"device bigint not null, "
+		"inode bigint not null, "
+		"ctime bigint not null, "
+		"target text not null)");
+	SQLCHECK(db,result0,PGRES_COMMAND_OK,err1);
+	PQclear(result0);
 
 	//Part 1
 	while	(!feof(stdin))
 		{	if (getdelim(&buf,&buf_len,'\0',stdin)==-1) break;
 			result0=PQexecParams(db,
 				"select "\
+					"inodes.device, inodes.inode, inodes.ctime, "
 					"mode, uid, gid, mtime, content "\
 					"from inodes join paths on paths.device=inodes.device and paths.inode=inodes.inode and paths.ctime=inodes.ctime "\
 					"where path=$1 and not exists (select * from paths as alias where alias.path=paths.path and alias.xtime>paths.xtime and alias.xtime<$2)",
@@ -176,15 +229,19 @@ int main
 			if	(	PQgetisnull(result0,0,0)
 					|| PQgetisnull(result0,0,1)
 					|| PQgetisnull(result0,0,2)
-					|| PQgetisnull(result0,0,3))
+					|| PQgetisnull(result0,0,3)
+					|| PQgetisnull(result0,0,4)
+					|| PQgetisnull(result0,0,5)
+					|| PQgetisnull(result0,0,6)
+					)
 				{	fputs("sanity check failed\n",stderr); AT;
 					goto err1; }
-			mode=ntohl(*(uint32_t *)PQgetvalue(result0,0,0));
+			mode=ntohl(*(uint32_t *)PQgetvalue(result0,0,3));
 			switch	(mode-mode%4096){
 				case 16384: //dir
-					uid=ntohl(*(uint32_t *)PQgetvalue(result0,0,1));
-					gid=ntohl(*(uint32_t *)PQgetvalue(result0,0,2));
-					mtime=be64toh(*(uint64_t *)PQgetvalue(result0,0,3));
+					uid=ntohl(*(uint32_t *)PQgetvalue(result0,0,4));
+					gid=ntohl(*(uint32_t *)PQgetvalue(result0,0,5));
+					mtime=be64toh(*(uint64_t *)PQgetvalue(result0,0,6));
 					if	(	fputs(buf,dirs_tmpfile)==EOF
 							|| fputc(0,dirs_tmpfile)
 							|| fwrite(&mode,sizeof(mode_t),1,dirs_tmpfile)!=1
@@ -194,13 +251,13 @@ int main
 						{	fputs("error writing to dirs tmpfile\n",stderr); goto err1; }
 					break;
 				case 32768: //regular file
-					if	(PQgetisnull(result0,0,4))
+					if	(PQgetisnull(result0,0,7))
 						{	fputs("sanity check failed\n",stderr); AT;
 							goto err1; }
 					fprintf(	
 						hashes_tmpfile,
 						"%s\n",
-						PQgetvalue(result0,0,4));
+						PQgetvalue(result0,0,7));
 					result1=PQexecParams(db,
 						"insert into paths_to_restore values($1)",1,
 						NULL, (char const * const []){ buf },
@@ -209,19 +266,33 @@ int main
 						PQclear(result1);
 					break;
 				case 40960: //symlink
-					if	(PQgetisnull(result0,0,4))
+					if	(PQgetisnull(result0,0,7))
 						{	fputs("sanity check failed\n",stderr); AT;
 							goto err1; }
-					if	(build_restore_path(buf,path_ar1))
-						{	fputs("build restore path failed\n",stderr); AT;
-							goto err1; }
-					strcpy(path_ar0,path_ar1);
-					//dirname modifies arg
-					if	(	mkdir_recursive(dirname(path_ar1))
-							|| symlink(PQgetvalue(result0,0,4),path_ar0))
-						{	fputs("could not create symlink\n",stderr);
-							perror(path_ar0); AT;
-							goto err1; }
+					result1=PQexecParams(
+						db,
+						"insert into symlink_inodes values($1,$2,$3,$4)",
+						4,NULL,
+						(char const * const []){
+							PQgetvalue(result0,0,0),
+							PQgetvalue(result0,0,1),
+							PQgetvalue(result0,0,2),
+							PQgetvalue(result0,0,7)}
+						, (const int []){
+							sizeof(uint64_t),
+							sizeof(uint64_t),
+							sizeof(uint64_t),
+							0 },
+						(const int []){1,1,1,0},1);
+					if	(PQresultStatus(result1)!=PGRES_COMMAND_OK)
+						{ AT; goto err2; }
+					PQclear(result1);
+					result1=PQexecParams(db,
+						"insert into paths_to_restore values($1)",
+						1, NULL, (char const * const []){ buf },
+						(int const []){ 0 }, (int const []){0},0);
+					SQLCHECK(db,result1,PGRES_COMMAND_OK,err2);
+					PQclear(result1);
 					break;
 				default:
 					fputs("sanity check failed\n",stderr); AT;
@@ -229,7 +300,7 @@ int main
 			PQclear(result0); }
 	if (ferror(stdin)) { perror("stdin"); goto err0; }
 
-	//Part 2
+	//Restore regular files
 	if	(fseek(hashes_tmpfile,0,SEEK_SET))
 		{ perror("seek on hashes tmpfile failed\n"); AT; goto err0;}
 	if	(pipe(sort_pipe_fd))
@@ -246,7 +317,6 @@ int main
 		{ perror("fork failed"); AT; goto err0; }
 	if	(close(sort_pipe_fd[1]) || !(child_stdout=fdopen(sort_pipe_fd[0],"rb")))
 		{ perror("sort child error"); AT; goto err0; }
-
 	while	(!feof(child_stdout))
 		{	if(!fgets(hash,2*SHA256_DIGEST_LENGTH+2,child_stdout)) break;
 			hash[2*SHA256_DIGEST_LENGTH]='\0';
@@ -337,6 +407,10 @@ int main
 						 else{	if	(build_restore_path(PQgetvalue(result1,0,0),path_ar1))
 								{	fputs("build restore path failed\n",stderr); AT;
 									goto err2; }
+							strncpy(tmp,path_ar1,PATH_MAX+1);
+							tmp[PATH_MAX]=0;
+							if	(mkdir_recursive(dirname(tmp)))
+								{ perror(path_ar1); AT; goto err2; }
 							if	(link(path_ar0,path_ar1))
 								{ perror(path_ar1); AT; goto err2; }}
 					PQclear(result1); }
@@ -352,6 +426,36 @@ int main
 	while ((wait_result=waitpid(sort_pid,&r,0))==-1&&errno==EINTR)
 	if	(wait_result<0 || !WIFEXITED(r) || WEXITSTATUS(r))
 		{ perror("sort child error"); AT; goto err0; }
+
+	//Restore symlinks
+	result0=PQexec(	db,
+			"declare symlink_inodes_cursor cursor for "
+			"select distinct device,inode,ctime,target "
+			"from symlink_inodes");
+	if	(PQresultStatus(result0)!=PGRES_COMMAND_OK)
+		{ fputs(PQerrorMessage(db),stderr); AT; goto err1; }
+	PQclear(result0);
+	while(1){
+		result0=PQexec(db,"fetch symlink_inodes_cursor");
+		if	(PQresultStatus(result0)!=PGRES_TUPLES_OK)
+			{ fputs(PQerrorMessage(db),stderr); AT; goto err1; }
+		if(!PQntuples(result0)) break;
+		if	(restore_inode(
+				db,
+				t,
+				PQgetvalue(result0,0,0),
+				PQgetvalue(result0,0,1),
+				PQgetvalue(result0,0,2),
+				restore_symlink,
+				PQgetvalue(result0,0,3)))
+			{ AT; goto err1; }
+		PQclear(result0); }
+	PQclear(result0);
+	result0=PQexec(db,"close symlink_inodes_cursor");
+	if	(PQresultStatus(result0)!=PGRES_COMMAND_OK)
+		{ fputs(PQerrorMessage(db),stderr); AT; goto err1; }
+	PQclear(result0);
+
 	PQfinish(db);
 	free(key);
 
