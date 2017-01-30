@@ -19,7 +19,7 @@ if [ ! "$tmp" ]; then tmp=/tmp; fi
 mkdir "$tmp/$$"
 
 function s3_put { #s3-bucket-name hash path
-	echo "put: starting $2 $3" >&2
+#	echo "put: starting $2 $3" >&2
 	hmac=`echo -n "$hash" | "$dir"/../lib/verity-backup/hmacs <(echo -n "$passphrase_xxd" | xxd -r) | cut -d ' ' -f 1`
 	mkdir "$tmp/$$/$2.d"
 	ln -s "$3" "$tmp/$$/$2.d/$2"
@@ -27,8 +27,8 @@ function s3_put { #s3-bucket-name hash path
 #	"$dir"/../lib/verity-backup/noise "$3" "$tmp/$$/$2.d/noise"
 	( ls "$tmp/$$/$2.d" | tar chCfT "$tmp/$$/$2.d" - - | gpg -c --force-mdc --batch --no-tty --passphrase-fd 3 3< <(echo -n "$passphrase_xxd" | xxd -r) > "$tmp/$$/$hmac" ) 2> "$tmp/$$/err"
 	if [ `stat -c%s "$tmp/$$/err"` -ne 0 ]; then
-		cat "$tmp/$$/err" >&2
 		echo "verity_backup put: aborting on tar|gpg error for $2 $3" >&2
+		cat "$tmp/$$/err" >&2
 		rm -f "$tmp/$$/$hmac"
 		rm -rf "$tmp/$$/$2.d"
 		return 1; fi
@@ -38,8 +38,8 @@ function s3_put { #s3-bucket-name hash path
 #	err=`grep -v -e 'gpg: CAST5 encrypted data' -e 'gpg: encrypted with 1 passphrase' -e 'gpg: WARNING: message was not integrity protected' "$tmp/$$/err"`
 	err=`grep -v -e 'gpg: CAST5 encrypted data' -e 'gpg: encrypted with 1 passphrase' "$tmp/$$/err"`
 	if [ "$err" ]; then
-		echo "$err" >&2
 		echo "verity_backup put: aborting on gpg|tar pipe error for $2 $3" >&2
+		echo "$err" >&2
 		rm "$tmp/$$/$hmac"
 		rm -rf "$tmp/$$/$2.d"
 		return 1; fi 
@@ -58,7 +58,7 @@ function s3_put { #s3-bucket-name hash path
 	rm -rf "$tmp/$$/$2.d"
 	total=`echo $total+$(stat -c %s "$tmp/$$/$hmac") | bc -l`
 	if	[ "$spool_dir" ]
-		then	echo "put: copying $hmac to $spool_dir instead of uplaoding directly" >&2
+		then	#echo "put: copying $hmac to $spool_dir instead of uplaoding directly" >&2
 			mkdir -p "$spool_dir"
 			mv -i "$tmp/$$/$hmac" "$spool_dir/$hmac.$md5"
 		else	md5=`echo $md5 | xxd -p -r | openssl enc -base64`
@@ -66,7 +66,7 @@ function s3_put { #s3-bucket-name hash path
 			rm "$tmp/$$/$hmac"
 			echo "$hmac" >> /var/local/cache/verity-backup/"$1"
 			fi
-	echo "put: finished $2 $3" >&2
+	#echo "put: finished $2 $3" >&2
 	echo "$2$3"; }
 
 cat /dev/stdin > "$tmp/$$/stdin-buf"
