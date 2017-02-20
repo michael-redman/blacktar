@@ -102,7 +102,7 @@ while IFS= read -r -d '' line; do
 		then if	[ "$total" -gt "$limit" ]; then break; fi; fi
 	done < <("$dir"/../lib/casillero/paths "$tmp/$$/stdin-sorted" < "$tmp/$$/diff.hashes")
 
-pg_dump $db_host_arg $db_name | gpg -c --force-mdc --passphrase-fd 3 3< <(echo -n "$passphrase_xxd" | xxd -r) > /tmp/$$/DB
+pg_dump $db_host_arg $db_name | gpg -c --force-mdc --passphrase-fd 3 3< <(echo -n "$passphrase_xxd" | xxd -r) > /tmp/$$/db
 aws s3 cp /tmp/$$/db s3://"$bucket"/db.pg_dump.gpg
 
 rm -rf "$tmp/$$"
