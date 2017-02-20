@@ -1,30 +1,34 @@
 #!/bin/bash
 
-USE="verity_list -c ... | verity_backup [ -s spool_dir ] [ -l limit_bytes ] /key/file s3-bucket"
+USE="verity_list -c ... | casillero_backup [ -s spool_dir ] [ -l limit_bytes ] [-h db_host ] db_name /key/file s3-bucket"
 
 dir=`cd $(dirname $0) && pwd`
 
 argv=("$@")
-while	getopts "s:l:" opt; do
+while	getopts "h:s:l:" opt; do
 	case	"$opt" in
+		h)	db_host_arg="-h $OPTARG";;
 		s)	spool_dir="$OPTARG";;
 		l)	limit="$OPTARG";;
 		\?)	echo "$USE" >&2; exit 1;; esac; done
-if [ $(($#-$OPTIND)) -ne 1 ]; then echo "$USE"; exit 1; fi
-passphrase_xxd="`xxd \"${argv[$OPTIND-1]}\"`"
-bucket="${argv[$OPTIND]}"
+if [ $(($#-$OPTIND)) -ne 2 ]; then echo "$USE" >&2; exit 1; fi
+db_name="${argv[$OPTIND-1]}"
+passphrase_xxd="`xxd \"${argv[$OPTIND]}\"`"
+bucket="${argv[$OPTIND+1]}"
 total=0
+
+umask 027
 
 if [ ! "$tmp" ]; then tmp=/tmp; fi
 mkdir "$tmp/$$"
 
 function s3_put { #s3-bucket-name hash path
 #	echo "put: starting $2 $3" >&2
-	hmac=`echo -n "$hash" | "$dir"/../lib/verity-backup/hmacs <(echo -n "$passphrase_xxd" | xxd -r) | cut -d ' ' -f 1`
+	hmac=`echo -n "$hash" | "$dir"/../lib/casillero/hmacs <(echo -n "$passphrase_xxd" | xxd -r) | cut -d ' ' -f 1`
 	mkdir "$tmp/$$/$2.d"
 	ln -s "$3" "$tmp/$$/$2.d/$2"
 #	noise to osbscure file size
-#	"$dir"/../lib/verity-backup/noise "$3" "$tmp/$$/$2.d/noise"
+#	"$dir"/../lib/casillero/noise "$3" "$tmp/$$/$2.d/noise"
 	( ls "$tmp/$$/$2.d" | tar chCfT "$tmp/$$/$2.d" - - | gpg -c --force-mdc --batch --no-tty --passphrase-fd 3 3< <(echo -n "$passphrase_xxd" | xxd -r) > "$tmp/$$/$hmac" ) 2> "$tmp/$$/err"
 	if [ `stat -c%s "$tmp/$$/err"` -ne 0 ]; then
 		echo "verity_backup put: aborting on tar|gpg error for $2 $3" >&2
@@ -64,7 +68,7 @@ function s3_put { #s3-bucket-name hash path
 		else	md5=`echo $md5 | xxd -p -r | openssl enc -base64`
 			verity_s3_put "$1/$hmac" filename="$tmp/$$/$hmac" md5="$md5"
 			rm "$tmp/$$/$hmac"
-			echo "$hmac" >> /var/local/cache/verity-backup/"$1"
+			echo "$hmac" >> /var/local/cache/casillero/"$1"
 			fi
 	#echo "put: finished $2 $3" >&2
 	echo "$2$3"; }
@@ -77,15 +81,15 @@ while IFS= read -r -d '' line; do
 	echo -ne \\0 >> "$tmp/$$/stdin-sorted"
 	done < <(sort -uz "$tmp/$$/stdin-buf")
 
-"$dir"/../lib/verity-backup/hmacs <(echo -n "$passphrase_xxd" | xxd -r) < "$tmp/$$/hashes.in" | sort -u > "$tmp/$$/hash_lookup_table"
+"$dir"/../lib/casillero/hmacs <(echo -n "$passphrase_xxd" | xxd -r) < "$tmp/$$/hashes.in" | sort -u > "$tmp/$$/hash_lookup_table"
 rm "$tmp/$$/hashes.in"
 cut -d ' ' -f 1 < "$tmp/$$/hash_lookup_table" > "$tmp/$$/db"
 
-if	[ ! -f "/var/local/cache/verity-backup/$bucket" ]
+if	[ ! -f "/var/local/cache/casillero/$bucket" ]
 	then	verity_s3_list_keys "$bucket" | sort -u \
-		> "/var/local/cache/verity-backup/$bucket"; fi
+		> "/var/local/cache/casillero/$bucket"; fi
 
-diff "$tmp/$$/db" <(sort -u "/var/local/cache/verity-backup/$bucket") | grep '^<' | cut -c 3- | "$dir"/../lib/verity-backup/hashes "$tmp/$$/hash_lookup_table" > "$tmp/$$/diff.hashes"
+diff "$tmp/$$/db" <(sort -u "/var/local/cache/casillero/$bucket") | grep '^<' | cut -c 3- | "$dir"/../lib/verity-backup/hashes "$tmp/$$/hash_lookup_table" > "$tmp/$$/diff.hashes"
 rm "$tmp/$$/hash_lookup_table" "$tmp/$$/db"
 if	[ ! -f "$tmp/$$/diff.hashes" ]
 	then rm -rf "$tmp/$$"; exit; fi
@@ -96,7 +100,10 @@ while IFS= read -r -d '' line; do
 	s3_put "$bucket" "$hash" "$path"
 	if	[ "$limit" ]
 		then if	[ "$total" -gt "$limit" ]; then break; fi; fi
-	done < <("$dir"/../lib/verity-backup/paths "$tmp/$$/stdin-sorted" < "$tmp/$$/diff.hashes")
+	done < <("$dir"/../lib/casillero/paths "$tmp/$$/stdin-sorted" < "$tmp/$$/diff.hashes")
+
+pg_dump $db_host_arg $db_name | gpg -c --force-mdc --passphrase-fd 3 3< <(echo -n "$passphrase_xxd" | xxd -r) > /tmp/$$/DB
+aws s3 cp /tmp/$$/db s3://"$bucket"/db.pg_dump.gpg
 
 rm -rf "$tmp/$$"
 

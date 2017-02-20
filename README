@@ -1,33 +1,46 @@
-VERITY-BACKUP
+CASILLERO
 
 Content-addressed backup system for Amazon S3.
 
-Copyright 2014 Michael Redman
+Copyright 2014-2017 Michael Redman
 
-Verity-backup comes with ABSOLUTELY NO WARRANTY, to the extent permitted by applicable law.  See LICENSE file.
+Casillero comes with ABSOLUTELY NO WARRANTY, to the extent permitted by applicable law.  See LICENSE file.
 
-ABOUT
+USE CASE
 
-Verity-backup backs up your files to S3, encrypted by GNUPG, and indexed by the SHA-256 HMACs of the files' SHA-256 hashes.
+Casillero exists because of the following requirements:
 
-This "content-addressed" design means that Verity-backup only stores 1 copy of a file no matter how many copies are on your filesystem; Verity-backup never has to re-back up unchanged files that have only been moved or renamed; you can make as many incremental backups as you want or clean up old garbage from the backup store without ever having to re-do a "full" backup; and Verity-backup can resume an interrupted backup without re-transferring any files.
+- Renaming/moving/linking files does not result in the whole file getting stored in the backup store again. In other words the size of the backup store is O(distinct blobs) not O(paths).
+- Expiration / garbage cleanup
+- Backup store is encrypted
+- No need for local mirror of backup store.
+- Reasonably fault-tolerant of shitty Internet connections and can resume interrupted backups reasonably close to where left off.
 
-Verity-backup also caches a list of which hashes are on S3 so it doesn't have to list out your S3 bucket each backup run.
+The combination of Git's orphan branch feature, and an encrypted filesystem like LUKS or Ecryptfs, would work for this use case if there were a reasonably stable way to mount the remote backup store as a local file system over a shitty Internet connection and not have commands like "umount" and "df -h" hang, or the backup store be left in an indeterminate state if a backup is interrupted or you force an umount. Hence casillero which lives entirely in userspace.
 
-Verity-backup uses the Verity content tracking system to map between hashes and paths on your file system where content can be found or needs to be restored.  See the note in the verity-backup(7) man page about making sure your database gets backed up when your files do.
+INSTALLATION - DEBIAN
 
-INSTALLING
+#Clone and install Verity dependency
 
-Verity-backup was developed on Debian Linux and has not yet been compiled or tested on other systems.
+root@yourhost# apt-get install git-core
+you@yourhost$ git clone git clone https://github.com/michael-redman/verity.git
+you@yourhost$ cd verity
+you@hourhost$ less README #follow instructions inside
 
-Verity-backup depends on Verity, which you can clone from github.com/michael-redman
+#Install Casillero dependencies:
+root@yourhost# apt-get install libjson-c-dev libs3-2 awscli
+#Configure awscli and libs3. libs3 environment variables need to be set when you run casillero.
 
-Blacktar also depends on libs3-2, which is in the Debian repositories.
+#Clone, build, and install Casillero
+you@yourhost$ git clone https://github.com/michael-redman/casillero.git
+you@yourhost$ cd casillero
+you@yourhost$ make
+root@yourhost# make install
 
-Blacktar builds with the standard "make" and "make install" commands.
+NOTES
 
 See the note in the Verity documentation about memory usage.  Blacktar also supports the QUERY_TYPE=CORRELATED_SUBQUERY make option.
 
-After installing please read the use examples and design limitations in the verity-backup(7) manual page.
+After installing please read the use examples and design limitations in the casillero(7) manual page.
 
 IN GOD WE TRVST.

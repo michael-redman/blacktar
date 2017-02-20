@@ -1,4 +1,4 @@
-#define USE "verity_s3_list_cruft 'db conn string' key_file < output_of_s3_list_keys\n"
+#define USE "casillero_s3_list_cruft 'db conn string' key_file < output_of_s3_list_keys\n"
 
 #include <libpq-fe.h>
 #include <openssl/hmac.h>
@@ -57,6 +57,7 @@ int main (int argc, char ** argv) {
 		{	if (!fgets(s3_key,S3_KEY_MAX_LEN+2,stdin)) break;
 			i=strlen(s3_key)-1;
 			if (s3_key[i]=='\n') s3_key[i]='\0';
+			if (!strcmp(s3_key,"db.pg_dump.gpg")) continue;
 			if	(!bsearch(
 					&s3_key_p,
 					hmacs,

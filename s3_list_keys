@@ -2,17 +2,14 @@
 
 modulus=1
 while [ true ]; do
-	s3 list $@ > /tmp/$$.out 2> /tmp/$$.err
+	aws s3 ls s3://"$1" --recursive > /tmp/$$.out 2> /tmp/$$.err
 	r=$?
-	if [ `stat -c%s /tmp/$$.err` -ne 0 ]; then r=1; fi
-	if [ $r -eq 0 ]; then break; fi
+	if [ $r -eq 0 -a `stat -c%s /tmp/$$.err` -eq 0 ]; then break; fi
 	cat /tmp/$$.err >&2
 	while [ $(($RANDOM%$modulus)) -ne 0 ]; do sleep 60; done
 	modulus=$(($modulus+1)); done
+perl -pe 's/^([^\s]+\s+){3}//' < /tmp/$$.out
+rm /tmp/$$.out /tmp/$$.err
 
-rm /tmp/$$.err
-tail -n +3 /tmp/$$.out | /usr/local/share/verity-backup/strip_s3_list
-rm /tmp/$$.out
-
-#Copyright 2014 Michael Redman
+#Copyright 2014-2017 Michael Redman
 #IN GOD WE TRVST.
