@@ -1,6 +1,6 @@
 CASILLERO
 
-Content-addressed backup system for Amazon S3.
+Content-addressed backup system for Debian and Amazon S3.
 
 Copyright 2014-2017 Michael Redman
 
@@ -10,13 +10,13 @@ USE CASE
 
 Casillero exists because of the following requirements:
 
-- Renaming/moving/linking files does not result in the whole file getting stored in the backup store again. In other words the size of the backup store is O(distinct blobs) not O(paths).
+- Renaming/moving/linking files does not result in the whole file getting stored in the backup store again. Similarly, if there are multiple copies of files the size of the backup store is O(distinct blobs) not O(paths).
 - Expiration / garbage cleanup
 - Backup store is encrypted
 - No need for local mirror of backup store.
-- Reasonably fault-tolerant of shitty Internet connections and can resume interrupted backups reasonably close to where left off.
+- Reasonably fault-tolerant of shitty Internet connections and can resume interrupted backups close to where left off.
 
-The combination of Git's orphan branch feature, and an encrypted filesystem like LUKS or Ecryptfs, would work for this use case if there were a reasonably stable way to mount the remote backup store as a local file system over a shitty Internet connection and not have commands like "umount" and "df -h" hang, or the backup store be left in an indeterminate state if a backup is interrupted or you force an umount. Hence casillero which lives entirely in userspace.
+The combination of Git's orphan branch feature, and an encrypted filesystem like LUKS or Ecryptfs, would work for this use case if there were a reasonably stable way to mount the remote backup store as a local file system over a shitty Internet connection. Until such a solution appears, there is casillero which lives entirely in userspace.
 
 INSTALLATION - DEBIAN
 
@@ -28,7 +28,7 @@ you@yourhost$ cd verity
 you@hourhost$ less README #follow instructions inside
 
 #Install Casillero dependencies:
-root@yourhost# apt-get install libjson-c-dev libs3-2 awscli
+root@yourhost# apt-get install libs3-2 awscli
 #Configure awscli and libs3. libs3 environment variables need to be set when you run casillero.
 
 #Clone, build, and install Casillero
@@ -39,7 +39,7 @@ root@yourhost# make install
 
 NOTES
 
-See the note in the Verity documentation about memory usage.  Blacktar also supports the QUERY_TYPE=CORRELATED_SUBQUERY make option.
+See the note in the Verity documentation about memory usage.  Casillero also supports the QUERY_TYPE=CORRELATED_SUBQUERY make option.
 
 After installing please read the use examples and design limitations in the casillero(7) manual page.
 
