@@ -31,7 +31,7 @@ function s3_put { #s3-bucket-name hash path
 #	"$dir"/../lib/casillero/noise "$3" "$tmp/$$/$2.d/noise"
 	( ls "$tmp/$$/$2.d" | tar chCfT "$tmp/$$/$2.d" - - | gpg -c --force-mdc --batch --no-tty --passphrase-fd 3 3< <(echo -n "$passphrase_xxd" | xxd -r) > "$tmp/$$/$hmac" ) 2> "$tmp/$$/err"
 	if [ `stat -c%s "$tmp/$$/err"` -ne 0 ]; then
-		echo "verity_backup put: aborting on tar|gpg error for $2 $3" >&2
+		echo "casillero_backup put: aborting on tar|gpg error for $2 $3" >&2
 		cat "$tmp/$$/err" >&2
 		rm -f "$tmp/$$/$hmac"
 		rm -rf "$tmp/$$/$2.d"
@@ -42,13 +42,13 @@ function s3_put { #s3-bucket-name hash path
 #	err=`grep -v -e 'gpg: CAST5 encrypted data' -e 'gpg: encrypted with 1 passphrase' -e 'gpg: WARNING: message was not integrity protected' "$tmp/$$/err"`
 	err=`grep -v -e 'gpg: CAST5 encrypted data' -e 'gpg: encrypted with 1 passphrase' "$tmp/$$/err"`
 	if [ "$err" ]; then
-		echo "verity_backup put: aborting on gpg|tar pipe error for $2 $3" >&2
+		echo "casillero_backup put: aborting on gpg|tar pipe error for $2 $3" >&2
 		echo "$err" >&2
 		rm "$tmp/$$/$hmac"
 		rm -rf "$tmp/$$/$2.d"
 		return 1; fi 
 	if	[ ! -f "$tmp/$$/$2.d/$2" ]; then
-		echo "verity_backup verify: missing from archive: $2 ( $3 )" >&2
+		echo "casillero_backup verify: missing from archive: $2 ( $3 )" >&2
 		rm "$tmp/$$/$hmac"
 		rm -rf "$tmp/$$/$2.d"
 		return 1; fi
@@ -66,7 +66,7 @@ function s3_put { #s3-bucket-name hash path
 			mkdir -p "$spool_dir"
 			mv -i "$tmp/$$/$hmac" "$spool_dir/$hmac.$md5"
 		else	md5=`echo $md5 | xxd -p -r | openssl enc -base64`
-			verity_s3_put "$1/$hmac" filename="$tmp/$$/$hmac" md5="$md5"
+			casillero_s3_put "$1/$hmac" filename="$tmp/$$/$hmac" md5="$md5"
 			rm "$tmp/$$/$hmac"
 			echo "$hmac" >> /var/local/cache/casillero/"$1"
 			fi
@@ -86,10 +86,10 @@ rm "$tmp/$$/hashes.in"
 cut -d ' ' -f 1 < "$tmp/$$/hash_lookup_table" > "$tmp/$$/db"
 
 if	[ ! -f "/var/local/cache/casillero/$bucket" ]
-	then	verity_s3_list_keys "$bucket" | sort -u \
+	then	casillero_s3_list_keys "$bucket" | sort -u \
 		> "/var/local/cache/casillero/$bucket"; fi
 
-diff "$tmp/$$/db" <(sort -u "/var/local/cache/casillero/$bucket") | grep '^<' | cut -c 3- | "$dir"/../lib/verity-backup/hashes "$tmp/$$/hash_lookup_table" > "$tmp/$$/diff.hashes"
+diff "$tmp/$$/db" <(sort -u "/var/local/cache/casillero/$bucket") | grep '^<' | cut -c 3- | "$dir"/../lib/casillero/hashes "$tmp/$$/hash_lookup_table" > "$tmp/$$/diff.hashes"
 rm "$tmp/$$/hash_lookup_table" "$tmp/$$/db"
 if	[ ! -f "$tmp/$$/diff.hashes" ]
 	then rm -rf "$tmp/$$"; exit; fi

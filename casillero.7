@@ -74,7 +74,7 @@ The backup script backs up your entire database every run. If that is inefficien
 
 .SH BUGS
 
-There is a bug affecting casillero_backup and the above usage example on user accounts where gpg has never been run before.  verity_backup does not recognize messages like "gpg: directory `/home/ec2-user/.gnupg' created" as benign, and will abort backing up the current file.  casillero_backup will backup any aborted files on the next run(s) when gpg is done printing its setup messages, or you can work around the bug entirely by manually encrypting a file with gpg before ever running casillero_backup.
+There is a bug affecting casillero_backup and the above usage example on user accounts where gpg has never been run before.  casillero_backup does not recognize messages like "gpg: directory `/home/ec2-user/.gnupg' created" as benign, and will abort backing up the current file.  casillero_backup will backup any aborted files on the next run(s) when gpg is done printing its setup messages, or you can work around the bug entirely by manually encrypting a file with gpg before ever running casillero_backup.
 
 .SH AUTHOR
 
