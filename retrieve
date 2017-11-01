@@ -40,9 +40,9 @@ while [ true ]; do
 		sleep 60; done
 	rm -rf "$tmp/$$/$$"
 	mkdir "$tmp/$$/$$"
-	( gpg --batch --no-tty --passphrase-fd 3 3< <(echo -n "$passphrase_xxd" | xxd -r) < "$tmp/$$/out" | tar xCf "$tmp/$$/$$" - ) 2> "$tmp/$$/err"
+	( gpg --batch --no-tty --passphrase-fd 3 3< <(echo -n "$passphrase_xxd" | xxd -r) -d < "$tmp/$$/out" | tar xCf "$tmp/$$/$$" - ) 2> "$tmp/$$/err"
 #	err=`grep -v -e 'gpg: CAST5 encrypted data' -e 'gpg: encrypted with 1 passphrase' -e 'gpg: WARNING: message was not integrity protected' "$tmp/$$/err"`
-	err=`grep -v -e 'gpg: CAST5 encrypted data' -e 'gpg: encrypted with 1 passphrase' "$tmp/$$/err"`
+	err=`grep -v -e 'gpg: CAST5 encrypted data' -e 'gpg: AES encrypted data' -e 'gpg: encrypted with 1 passphrase' "$tmp/$$/err"`
 	if [ "$err" ]; then
 		echo "$err" >&2
 		echo "s3_verify $hmac: gpg/tar pipeline printed errors, retrying" >&2

@@ -1,4 +1,4 @@
-#define USE "verity_list ... | grep -z ... | verity_restore [ -u username ] [ -r /restore/root ] [-t as-of-time_t] 'db connection string' /path/to/passphrase/file s3_bucket_name\n"
+#define USE "verity_list ... | grep -z ... | casillero_restore [ -u username ] [ -r /restore/root ] [-t as-of-time_t] 'db connection string' /path/to/passphrase/file s3_bucket_name\n"
 
 /* Logic:
 
@@ -377,8 +377,8 @@ int main
 									{	perror("i/o redirection failed"); AT;
 										exit(EXIT_FAILURE); }
 									if	(username)
-										execl("/usr/local/share/verity-backup/retrieve","/usr/local/share/verity-backup/retrieve","-u",username,argv[optind+2],hmac_text,path_ar0,hash,NULL);
-										else execl("/usr/local/share/verity-backup/retrieve","/usr/local/share/verity-backup/retrieve",argv[optind+2],hmac_text,path_ar0,hash,NULL);
+										execl("/usr/local/share/casillero/retrieve","/usr/local/share/casillero/retrieve","-u",username,argv[optind+2],hmac_text,path_ar0,hash,NULL);
+										else execl("/usr/local/share/casillero/retrieve","/usr/local/share/casillero/retrieve",argv[optind+2],hmac_text,path_ar0,hash,NULL);
 									perror("execl failed"); AT; exit(EXIT_FAILURE); }
 							if	(!retrieve_pid)
 								{	fputs("could not fork!\n",stderr); AT;
